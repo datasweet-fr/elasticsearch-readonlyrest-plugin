@@ -33,6 +33,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
+import org.elasticsearch.plugin.readonlyrest.acl.LoggedUser;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.utils.OAuthUtils;
@@ -127,6 +128,10 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
     if (conf.oauthEnabled) {
 	    OAuthToken token = OAuthUtils.getOAuthToken(rc.getHeaders(), conf);
 	    rc.setToken(token);
+	    if (token != null)
+	    	rc.setLoggedInUser(new LoggedUser(token.getPreferred_username()));
+	    else
+	    	rc.setLoggedInUser(new LoggedUser("Kibana"));
     }
     conf.acl.check(rc)
 
