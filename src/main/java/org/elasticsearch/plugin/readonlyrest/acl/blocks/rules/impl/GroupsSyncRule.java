@@ -24,6 +24,8 @@ import java.util.Optional;
 
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group.TYPE;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
@@ -45,28 +47,54 @@ public class GroupsSyncRule extends SyncRule {
   private String kibanaGroup = "Kibana";
   private String adminGroup = "Admin";
   
-  public GroupsSyncRule(Settings s, List<User> userList) throws RuleNotConfiguredException {
+  public GroupsSyncRule(Settings s, List<User> userList, Group grp) throws RuleNotConfiguredException {
     super();
 
     users = userList;
     String[] pGroups = s.getAsArray(this.getKey());
+//    if (pGroups != null && pGroups.length > 0) {
+//      for(int i = 0; i < pGroups.length; i++){
+//        if(pGroups[i] != null && pGroups[i].contains("@")){
+//          hasReplacements = true;
+//          break;
+//        }
+//      }
+//      this.groups = Arrays.asList(pGroups);
+//    }
+//    else {
+//      throw new RuleNotConfiguredException();
+//    }
+    
     if (pGroups != null && pGroups.length > 0) {
-      for(int i = 0; i < pGroups.length; i++){
-        if(pGroups[i] != null && pGroups[i].contains("@")){
-          hasReplacements = true;
-          break;
-        }
-      }
-      this.groups = Arrays.asList(pGroups);
-    }
-    else {
-      throw new RuleNotConfiguredException();
-    }
+		List<String> grps = new ArrayList<>();
+		grps.addAll(Arrays.asList(pGroups));
+		List<String> groups = Arrays.asList(pGroups);
+		if (groups.contains(kibanaGroup) || groups.contains(adminGroup))
+			this.groups = groups;
+		else {
+			List<String> tmp = new ArrayList<>();
+			if (grp != null) {
+				TYPE type = grp.getType();
+				grps.forEach(item -> {
+					if (item.toLowerCase().equals(type.toString().toLowerCase()))
+						tmp.add(grp.getGroup());
+					//TODO:  ??? not sure
+					if(item != null && item.contains("@")){
+						hasReplacements = true;
+					}
+				});
+			}
+			grps.addAll(tmp);
+			this.groups = grps;
+		}
+	} else {
+		throw new RuleNotConfiguredException();
+	}
   }
 
-  public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList) {
+  public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList, Group grp) {
     try {
-      return Optional.of(new GroupsSyncRule(s, userList));
+      return Optional.of(new GroupsSyncRule(s, userList, grp));
     } catch (RuleNotConfiguredException ignored) {
       return Optional.empty();
     }
@@ -99,7 +127,7 @@ public class GroupsSyncRule extends SyncRule {
 	  }
     } else {
     	OAuthToken token = rc.getToken();
-		List<String> commonGroups = new ArrayList<>(this.groups);
+    	List<String> commonGroups = new ArrayList<>(this.groups);
 		if (commonGroups.contains(kibanaGroup) && token == null)
 			return MATCH;
 		if (commonGroups == null || commonGroups.isEmpty() || token == null || token.getRoles() == null)
@@ -107,9 +135,7 @@ public class GroupsSyncRule extends SyncRule {
 		commonGroups.retainAll(token.getRoles());
 		if (!commonGroups.isEmpty() && token.getRoles().contains(adminGroup))
 			return MATCH;
-//		else 
-			//if (commonGroups.size() == token.getRoles().size())
-		if (!commonGroups.isEmpty())
+		else if (commonGroups.size() == token.getRoles().size())
 			return MATCH;
 		return NO_MATCH;
     }

@@ -17,11 +17,16 @@
 
 package org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl;
 
-import com.google.common.collect.Sets;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugin.readonlyrest.acl.RuleConfigurationError;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.MatcherWithWildcards;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
@@ -29,10 +34,7 @@ import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.IndicesRequestContext;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
+import com.google.common.collect.Sets;
 
 /**
  * Created by sscarduzio on 20/02/2016.
@@ -43,17 +45,17 @@ public class IndicesSyncRule extends SyncRule {
 
   private MatcherWithWildcards configuredWildcards;
 
-  public IndicesSyncRule(Settings s) throws RuleNotConfiguredException {
-    configuredWildcards = MatcherWithWildcards.fromSettings(s, getKey());
+  public IndicesSyncRule(Settings s, Group grp) throws RuleNotConfiguredException {
+    configuredWildcards = MatcherWithWildcards.fromSettings(s, getKey(), grp);
     if(configuredWildcards.getMatchers().stream().filter(m -> m.contains("@user")).findFirst().isPresent()){
       throw new RuleConfigurationError(
         "Please use the new, safer syntax for variable replacements. I.e. use @{user} instead of @user", null);
     }
   }
 
-  public static Optional<IndicesSyncRule> fromSettings(Settings s) {
+  public static Optional<IndicesSyncRule> fromSettings(Settings s, Group grp) {
     try {
-      return Optional.of(new IndicesSyncRule(s));
+      return Optional.of(new IndicesSyncRule(s, grp));
     } catch (RuleNotConfiguredException ignored) {
       return Optional.empty();
     }
@@ -179,20 +181,21 @@ public class IndicesSyncRule extends SyncRule {
       return MATCH;
     }
 
+    //Does not work for some reason
     // Run through sub-requests potentially mutating or discarding them.
-    if (rc.hasSubRequests()) {
-      Integer allowedSubRequests = rc.scanSubRequests((subRc) -> {
-        if (canPass(subRc)) {
-          return Optional.of(subRc);
-        }
-        return Optional.empty();
-      }, logger);
-      if (allowedSubRequests == 0) {
-        return NO_MATCH;
-      }
-      // We policed the single sub-requests, should be OK to let the allowed ones through
-      return MATCH;
-    }
+//    if (rc.hasSubRequests()) {
+//      Integer allowedSubRequests = rc.scanSubRequests((subRc) -> {
+//        if (canPass(subRc)) {
+//          return Optional.of(subRc);
+//        }
+//        return Optional.empty();
+//      }, logger);
+//      if (allowedSubRequests == 0) {
+//        return NO_MATCH;
+//      }
+//      // We policed the single sub-requests, should be OK to let the allowed ones through
+//      return MATCH;
+//    }
 
     // Regular non-composite request
     return canPass(rc) ? MATCH : NO_MATCH;

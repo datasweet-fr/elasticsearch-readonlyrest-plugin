@@ -17,9 +17,16 @@
 
 package org.elasticsearch.plugin.readonlyrest.wiring.requestcontext;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import java.net.InetSocketAddress;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchSecurityException;
@@ -45,15 +52,9 @@ import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.threadpool.ThreadPool;
 
-import java.net.InetSocketAddress;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 /**
  * Created by sscarduzio on 20/02/2016.
@@ -175,7 +176,7 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
     history.add(blockHistory);
   }
 
-  ActionRequest getUnderlyingRequest() {
+  public ActionRequest getUnderlyingRequest() {
     return actionRequest;
   }
 
@@ -305,7 +306,7 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
 
     List<? extends IndicesRequest> subRequests = SubRequestContext.extractNativeSubrequests(actionRequest);
 
-    logger.info("found " + subRequests.size() + " subrequests");
+    logger.debug("found " + subRequests.size() + " subrequests");
 
     // Composite request #TODO should we really prevent this?
     if (!doesInvolveIndices) {

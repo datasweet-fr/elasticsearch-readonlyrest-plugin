@@ -127,9 +127,10 @@ public class ConfigurationHelper {
 
   public static List<Setting<?>> allowedSettings() {
     String prefix = "readonlyrest.";
-    String rule_prefix = prefix + "access_control_rules.";
+    String rule_prefix = prefix + "template_rules.";
     String users_prefix = prefix + "users.";
     String ldaps_prefix = prefix + "ldaps.";
+    String groups_prefix = prefix + "rules.";
     String proxy_auth_configs_prefix = prefix + "proxy_auth_configs.";
     String user_groups_providers_prefix = prefix + "user_groups_providers.";
     String external_authentication_service_configs_prefix = prefix + "external_authentication_service_configs.";
@@ -155,6 +156,7 @@ public class ConfigurationHelper {
         grp(rule_prefix),
         grp(users_prefix),
         grp(ldaps_prefix),
+        grp(groups_prefix),
         grp(proxy_auth_configs_prefix),
         grp(user_groups_providers_prefix),
         grp(external_authentication_service_configs_prefix)

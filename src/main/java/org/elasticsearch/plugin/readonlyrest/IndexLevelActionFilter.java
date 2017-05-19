@@ -17,6 +17,9 @@
 
 package org.elasticsearch.plugin.readonlyrest;
 
+import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
+import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
+
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
@@ -33,7 +36,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
-import org.elasticsearch.plugin.readonlyrest.acl.LoggedUser;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.utils.OAuthUtils;
@@ -45,9 +47,6 @@ import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
-
-import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
-import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 
 /**
  * Created by sscarduzio on 19/12/2015.
@@ -76,7 +75,7 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
       return;
     }
 
-    logger.info("Readonly REST plugin is enabled. Yay, ponies!");
+    logger.info("Readonly REST plugin is enabled!");
   }
 
   @Override
@@ -160,7 +159,7 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
           return null;
         }
 
-        logger.info("forbidden request: " + rc + " Reason: " + result.getBlock() + " (" + result.getBlock() + ")");
+        logger.warn("forbidden request: " + rc + " Reason: " + result.getBlock() + " (" + result.getBlock() + ")");
         sendNotAuthResponse(channel);
         return null;
       });

@@ -17,11 +17,21 @@
 
 package org.elasticsearch.plugin.readonlyrest.acl.blocks;
 
-import com.google.common.collect.Sets;
+import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_CYAN;
+import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_RESET;
+import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_YELLOW;
+import static org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.CachedAsyncAuthenticationDecorator.wrapInCacheIfCacheIsEnabled;
+import static org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.CachedAsyncAuthorizationDecorator.wrapInCacheIfCacheIsEnabled;
+
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
-import org.elasticsearch.plugin.readonlyrest.acl.RuleConfigurationError;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.AsyncRule;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.AsyncRuleAdapter;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.LdapConfigs;
@@ -55,45 +65,59 @@ import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.UserGroupProv
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.VerbositySyncRule;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.XForwardedForSyncRule;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.phantomtypes.Authentication;
-import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 import org.elasticsearch.plugin.readonlyrest.utils.FuturesSequencer;
+import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-
-import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_CYAN;
-import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_RESET;
-import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_YELLOW;
-import static org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.CachedAsyncAuthenticationDecorator.wrapInCacheIfCacheIsEnabled;
-import static org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.CachedAsyncAuthorizationDecorator.wrapInCacheIfCacheIsEnabled;
+import com.google.common.collect.Sets;
 
 /**
  * Created by sscarduzio on 13/02/2016.
  */
 public class Block {
-  private final String name;
+  private String name;
   private final Policy policy;
   private final Logger logger;
-  private final Set<AsyncRule> conditionsToCheck;
+  private Set<AsyncRule> conditionsToCheck;
   private boolean authHeaderAccepted;
-
+  private boolean isKibanaRule = false;
+  
   public Block(Settings settings,
                List<User> userList,
                LdapConfigs ldapConfigs,
                List<ProxyAuthConfig> proxyAuthConfigs,
                List<UserGroupProviderConfig> groupsProviderConfigs,
-               List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs,Logger logger) {
+               List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs,
+               Group grp, Logger logger) {
     this.name = settings.get("name");
     String sPolicy = settings.get("type", Policy.ALLOW.name());
     this.logger = logger;
 
     policy = Block.Policy.valueOf(sPolicy.toUpperCase());
 
-    conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
-        externalAuthenticationServiceConfigs);
+    String[] grpRule = settings.getAsArray("groups");
+    // We flag the rule if it's a Kibana one as
+    // we'll process it more specifically
+    if (grpRule != null && grpRule.length > 0 && grpRule[0].equals("Kibana"))
+    	this.isKibanaRule = true;
+    // For each rule, we check if there is a
+    // template associated to the rule
+    // Then we modify the rule name to make it more distinct
+    for (int i = 0; i < grpRule.length; i++) {
+    	String group = grpRule[i];
+    	if (group.toLowerCase().equals(grp.getType().toString().toLowerCase())) {
+    		this.name = "[" + grp.getGroup() + "]" + settings.get("name");
+    		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
+    					externalAuthenticationServiceConfigs, grp);
+        	break;
+    	}
+    	else {
+    		this.name = settings.get("name");
+    		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
+    					externalAuthenticationServiceConfigs, null);
+    	}
+    }
+    //conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
+    //    externalAuthenticationServiceConfigs);
     authHeaderAccepted = conditionsToCheck.stream().anyMatch(this::isAuthenticationRule);
   }
 
@@ -172,7 +196,7 @@ public class Block {
 
   private Set<AsyncRule> collectRules(Settings s, List<User> userList, List<ProxyAuthConfig> proxyAuthConfigs,
       LdapConfigs ldapConfigs, List<UserGroupProviderConfig> groupsProviderConfigs,
-                                      List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs) {
+                                      List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs, Group grp) {
     Set<AsyncRule> rules = Sets.newLinkedHashSet();
     // Won't add the condition if its configuration is not found
 
@@ -182,7 +206,8 @@ public class Block {
     AuthKeySha1SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     AuthKeySha256SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     ProxyAuthSyncRule.fromSettings(s, proxyAuthConfigs).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-
+    if (ConfigurationHelper.isOAuthEnabled())
+    	TokenSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     // Inspection rules next; these act based on properties
     // of the request.
     KibanaAccessSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
@@ -193,13 +218,11 @@ public class Block {
     UriReSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     MaxBodyLengthSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     MethodsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    IndicesSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    ActionsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    GroupsSyncRule.fromSettings(s, userList).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+    IndicesSyncRule.fromSettings(s, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+    ActionsSyncRule.fromSettings(s, null).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+    GroupsSyncRule.fromSettings(s, userList, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     SearchlogSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     VerbositySyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    if (ConfigurationHelper.isOAuthEnabled())
-    	TokenSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     // then we could check potentially slow async rules
     LdapAuthAsyncRule.fromSettings(s, ldapConfigs).ifPresent(rules::add);
     LdapAuthenticationAsyncRule.fromSettings(s, ldapConfigs)
@@ -225,7 +248,16 @@ public class Block {
         (rule instanceof AsyncRuleAdapter && ((AsyncRuleAdapter) rule).getUnderlying() instanceof Authentication);
   }
 
-  public enum Policy {
+  public boolean isKibanaRule() {
+	return isKibanaRule;
+  }
+
+  public void setKibanaRule(boolean isKibanaRule) {
+	this.isKibanaRule = isKibanaRule;
+  }
+
+
+public enum Policy {
     ALLOW, FORBID;
 
     public static String valuesString() {
@@ -237,4 +269,23 @@ public class Block {
       return sb.toString();
     }
   }
+
+	@Override
+	public boolean equals(Object b) {
+		Block tested = null;
+		if (b instanceof Block)
+			tested = (Block) b;
+		if (tested == null)
+			return false;
+		if (!this.name.equals(tested.getName()))
+			return false;
+		if (!this.policy.equals(tested.getPolicy()))
+			return false;
+		return true;
+	}
+
+	@Override
+	public int hashCode() {
+		return super.hashCode();
+	}
 }

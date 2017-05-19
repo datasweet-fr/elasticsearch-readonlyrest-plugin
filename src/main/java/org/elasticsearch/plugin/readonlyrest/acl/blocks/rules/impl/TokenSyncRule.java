@@ -25,6 +25,7 @@ import java.util.Optional;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.plugin.readonlyrest.acl.LoggedUser;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
@@ -55,8 +56,10 @@ public class TokenSyncRule extends SyncRule {
 	@Override
 	public RuleExitResult match(RequestContext rc) {
 		logger.debug("BEGIN Check token");
-        if (!needToCheckRule && rc.getToken() == null)
+        if (!needToCheckRule && rc.getToken() == null) {
+        	rc.setLoggedInUser(new LoggedUser("Kibana"));
            return MATCH;
+        }
         if (rc.getToken() == null)
             return NO_MATCH;
         boolean valid = true;
@@ -67,6 +70,7 @@ public class TokenSyncRule extends SyncRule {
         valid &= expDate.after(now);
         // Save the status of the token for later
         rc.getToken().setValid(valid);
+        rc.setLoggedInUser(new LoggedUser(rc.getToken().getPreferredUsername()));
         logger.debug("END Check token");
         return valid ? MATCH : NO_MATCH;
 	}

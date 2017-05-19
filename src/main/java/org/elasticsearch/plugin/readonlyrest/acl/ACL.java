@@ -24,6 +24,8 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.BlockExitResult;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group.TYPE;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.LdapConfigs;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.User;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.ExternalAuthenticationServiceConfig;
@@ -48,9 +50,11 @@ import static org.elasticsearch.plugin.readonlyrest.ConfigurationHelper.ANSI_RES
  */
 
 public class ACL {
-  private static final String RULES_PREFIX = "readonlyrest.access_control_rules";
+ //private static final String RULES_PREFIX = "readonlyrest.access_control_rules";
+  public static final String TEMPLATE_RULES_PREFIX = "readonlyrest.template_rules";
   private static final String USERS_PREFIX = "readonlyrest.users";
   private static final String LDAPS_PREFIX = "readonlyrest.ldaps";
+  public static final String RULES_PREFIX = "readonlyrest.rules";
   private static final String PROXIES_PREFIX = "readonlyrest.proxy_auth_configs";
   private static final String USER_GROUPS_PROVIDERS_PREFIX = "readonlyrest.user_groups_providers";
   private static final String EXTERNAL_AUTH_SERVICES_PREFIX = "readonlyrest.external_authentication_service_configs";
@@ -61,26 +65,72 @@ public class ACL {
 
   public ACL(Client client, ConfigurationHelper conf) {
     Settings s = conf.settings;
-    Map<String, Settings> blocksMap = s.getGroups(RULES_PREFIX);
+    List<Group> viewerGroups = new ArrayList<>();
+	List<Group> editorGroups = new ArrayList<>();
+	List<Block> kibanaBlocks = new ArrayList<>();
+    Map<String, Settings> blocksMap = s.getGroups(TEMPLATE_RULES_PREFIX);
     List<ProxyAuthConfig> proxyAuthConfigs = parseProxyAuthSettings(s.getGroups(PROXIES_PREFIX).values());
     List<User> users = parseUserSettings(s.getGroups(USERS_PREFIX).values(), proxyAuthConfigs);
     LdapConfigs ldaps = LdapConfigs.fromSettings(LDAPS_PREFIX, s);
+    Map<String, Settings> groupMap = s.getGroups(RULES_PREFIX);
+	for (Integer counter = 0; counter < groupMap.size(); counter++) {
+		Group grp = new Group(groupMap.get(counter.toString()));
+		if (grp.getType().equals(TYPE.VIEWER))
+			viewerGroups.add(grp);
+		else if (grp.getType().equals(TYPE.EDITOR))
+			editorGroups.add(grp);
+	}
     List<UserGroupProviderConfig> groupsProviderConfigs = parseUserGroupsProviderSettings(
       s.getGroups(USER_GROUPS_PROVIDERS_PREFIX).values()
     );
     List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs =
       parseExternalAuthenticationServiceSettings(s.getGroups(EXTERNAL_AUTH_SERVICES_PREFIX).values());
-    blocksMap.entrySet()
-      .forEach(entry -> {
-        Block block = new Block(entry.getValue(), users, ldaps, proxyAuthConfigs, groupsProviderConfigs,
-                                externalAuthenticationServiceConfigs, logger
-        );
-        blocks.add(block);
-        if (block.isAuthHeaderAccepted()) {
-          ConfigurationHelper.setRequirePassword(true);
-        }
-        logger.info("ADDING #" + entry.getKey() + ":\t" + block.toString());
-      });
+//    blocksMap.entrySet()
+//      .forEach(entry -> {
+//        Block block = new Block(entry.getValue(), users, ldaps, proxyAuthConfigs, groupsProviderConfigs,
+//                                externalAuthenticationServiceConfigs, logger
+//        );
+//        blocks.add(block);
+//        if (block.isAuthHeaderAccepted()) {
+//          ConfigurationHelper.setRequirePassword(true);
+//        }
+//        logger.info("ADDING #" + entry.getKey() + ":\t" + block.toString());
+//      });
+    viewerGroups.forEach(grp -> {
+		for (Integer i = 0; i < blocksMap.size(); i++) {
+			Block block = new Block(blocksMap.get(i.toString()), users, ldaps,
+					proxyAuthConfigs, groupsProviderConfigs, externalAuthenticationServiceConfigs, grp, logger);
+			if (block.isKibanaRule()) {
+				if (!kibanaBlocks.contains(block))
+					kibanaBlocks.add(block);
+			} else if (!blocks.contains(block)) {
+				blocks.add(block);
+				logger.info("ADDING rule:\t" + block.toString());
+			}
+		}
+	});
+	editorGroups.forEach(grp -> {
+		for (Integer i = 0; i < blocksMap.size(); i++) {
+			Block block = new Block(blocksMap.get(i.toString()), users, ldaps,
+					proxyAuthConfigs, groupsProviderConfigs, externalAuthenticationServiceConfigs, grp, logger);
+			if (block.isKibanaRule()) {
+				if (!kibanaBlocks.contains(block))
+					kibanaBlocks.add(block);
+			} else if (!blocks.contains(block)) {
+				blocks.add(block);
+				logger.info("ADDING rule:\t" + block.toString());
+			}
+		}
+	});
+
+	// Adding Kibana specific rules at the end of the rules list
+	kibanaBlocks.forEach(block -> {
+		if (!blocks.contains(block)) {
+			blocks.add(block);
+			logger.info("ADDING Kibana rule:\t" + block.toString());
+		}
+	});
+
   }
 
   public CompletableFuture<BlockExitResult> check(RequestContext rc) {
@@ -109,7 +159,7 @@ public class ACL {
       nothing -> {
         Verbosity v = rc.getVerbosity();
         if (v.equals(Verbosity.INFO) || v.equals(Verbosity.ERROR)) {
-          logger.info(ANSI_RED + " no block has matched, forbidding by default: " + rc + ANSI_RESET);
+          logger.warn(ANSI_RED + " no block has matched, forbidding by default: " + rc + ANSI_RESET);
         }
         return BlockExitResult.noMatch();
       }
