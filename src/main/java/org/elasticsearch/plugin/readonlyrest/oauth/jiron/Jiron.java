@@ -35,6 +35,13 @@ public class Jiron {
 
 	private static final String MAC_PREFIX = "Fe26." + MAC_FORMAT_VERSION;
 
+	public static Options DEFAULT_ENCRYPTION_OPTIONS = new Options(256,
+			Algorithm.AES_256_CBC, 1);
+
+	public static Options DEFAULT_INTEGRITY_OPTIONS = new Options(256,
+			Algorithm.SHA_256, 1);
+
+	
 	public enum Algorithm {
 
 		AES_128_CBC("aes-128-cbc", "AES/CBC/PKCS5PADDING", 128, 128),
@@ -72,12 +79,6 @@ public class Jiron {
 			this.iterations = iterations;
 		}
 	}
-
-	public static Options DEFAULT_ENCRYPTION_OPTIONS = new Options(256,
-			Algorithm.AES_256_CBC, 1);
-
-	public static Options DEFAULT_INTEGRITY_OPTIONS = new Options(256,
-			Algorithm.SHA_256, 1);
 
 	public static String seal(String data, String password,
 			Options encryptionOptions, Options integrityOptions)
@@ -198,10 +199,8 @@ public class Jiron {
 		 * no chance for password rotation, there must be
 		 * a password supplied.
 		 */
-		if (passwordId.length() == 0) {
-			if(password == null || password.length() == 0) {
+		if (passwordId.length() == 0 && password == null || password.length() == 0) {
 				throw new JironException("Password is required for tokens that contain no password ID");
-			}
 		}
 		
 		/*
@@ -211,12 +210,10 @@ public class Jiron {
 		 * If we find one, we set the original password parameter to
 		 * this password.
 		 */
-		if (passwordId.length() > 0) {
-			if(passwordMap != null) {
-				String p = passwordMap.get(passwordId);
-				if(p != null) {
-					password = p;
-				}
+		if (passwordId.length() > 0 && passwordMap != null) {
+			String p = passwordMap.get(passwordId);
+			if(p != null) {
+				password = p;
 			}
 		}
 		
@@ -262,13 +259,7 @@ public class Jiron {
 							+ " but this version of iron requires "
 							+ MAC_PREFIX);
 		}
-
-		if (expiration != null) {
-//			if (!expiration.matches("\\d+$"))
-//				throw new JironIntegrityException(encapsulatedToken, "Expiration checking error");
-			// Expiration processing
-		}
-			
+		
 		byte[] integrityByteSalt = integrityHmacSaltString
 				.getBytes(StandardCharsets.UTF_8);
 		byte[] checkIntegrityHmac = hmac(charPassword, hmacBaseString,

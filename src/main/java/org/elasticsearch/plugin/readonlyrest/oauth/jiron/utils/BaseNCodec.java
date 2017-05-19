@@ -20,36 +20,7 @@ package org.elasticsearch.plugin.readonlyrest.oauth.jiron.utils;
 
 public abstract class BaseNCodec {
 
-	static class Context {
-
-        int ibitWorkArea;
-
-        long lbitWorkArea;
-
-        byte[] buffer;
-
-        int pos;
-
-        int readPos;
-
-        boolean eof;
-
-        int currentLinePos;
-
-        int modulus;
-
-        Context() {
-        }
-
-        @SuppressWarnings("boxing") // OK to ignore boxing here
-        public String toString() {
-            return String.format("%s[buffer=%s, currentLinePos=%s, eof=%s, ibitWorkArea=%s, lbitWorkArea=%s, " +
-                    "modulus=%s, pos=%s, readPos=%s]", this.getClass().getSimpleName(), buffer, currentLinePos, eof,
-                    ibitWorkArea, lbitWorkArea, modulus, pos, readPos);
-        }
-    }
-
-    static final int EOF = -1;
+	private static final int EOF = -1;
 
     public static final int MIME_CHUNK_SIZE = 76;
 
@@ -72,7 +43,7 @@ public abstract class BaseNCodec {
     protected final int lineLength;
 
     private final int chunkSeparatorLength;
-
+    
     protected BaseNCodec(int unencodedBlockSize, int encodedBlockSize, int lineLength, int chunkSeparatorLength) {
         this.unencodedBlockSize = unencodedBlockSize;
         this.encodedBlockSize = encodedBlockSize;
@@ -81,11 +52,11 @@ public abstract class BaseNCodec {
         this.chunkSeparatorLength = chunkSeparatorLength;
     }
 
-    boolean hasData(Context context) {  // package protected for access from I/O streams
+    private boolean hasData(Context context) {  // package protected for access from I/O streams
         return context.buffer != null;
     }
 
-    int available(Context context) {  // package protected for access from I/O streams
+    private int available(Context context) {  // package protected for access from I/O streams
         return context.buffer != null ? context.pos - context.readPos : 0;
     }
 
@@ -113,7 +84,7 @@ public abstract class BaseNCodec {
         return context.buffer;
     }
 
-    int readResults(byte[] b, int bPos, int bAvail, Context context) {
+    private int readResults(byte[] b, int bPos, int bAvail, Context context) {
         if (context.buffer != null) {
             int len = Math.min(available(context), bAvail);
             System.arraycopy(context.buffer, context.readPos, b, bPos, len);
@@ -234,6 +205,35 @@ public abstract class BaseNCodec {
             len += ((len + lineLength-1) / lineLength) * chunkSeparatorLength;
         }
         return len;
+    }
+    
+	static class Context {
+
+        public int ibitWorkArea;
+
+        public long lbitWorkArea;
+
+        public byte[] buffer;
+
+        public int pos;
+
+        public int readPos;
+
+        public boolean eof;
+
+        public int currentLinePos;
+
+        public int modulus;
+
+        Context() {
+        }
+
+        @SuppressWarnings("boxing") // OK to ignore boxing here
+        public String toString() {
+            return String.format("%s[buffer=%s, currentLinePos=%s, eof=%s, ibitWorkArea=%s, lbitWorkArea=%s, " +
+                    "modulus=%s, pos=%s, readPos=%s]", this.getClass().getSimpleName(), buffer, currentLinePos, eof,
+                    ibitWorkArea, lbitWorkArea, modulus, pos, readPos);
+        }
     }
 }
 

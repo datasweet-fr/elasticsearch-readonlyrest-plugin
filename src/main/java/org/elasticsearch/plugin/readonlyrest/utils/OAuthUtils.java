@@ -25,8 +25,6 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Map;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.logging.log4j.Logger;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 
@@ -60,11 +58,11 @@ public class OAuthUtils {
         OAuthToken oAuthToken = new OAuthToken();
         oAuthToken.setPublicKey(conf.tokenSecret);
         if (!Strings.isNullOrEmpty(tokenCookie)) {
-            return oAuthToken.parseEncryptedJWT(tokenCookie, conf.cookieSecret);
+            return oAuthToken.parseEncryptedJWT(tokenCookie, conf.cookieSecret, conf.tokenClientId);
         }
         else if (!Strings.isNullOrEmpty(tokenHeader)) {
             try {
-                return oAuthToken.parseDecryptedJWT(tokenHeader);
+                return oAuthToken.parseDecryptedJWT(tokenHeader, conf.tokenClientId);
             } catch (IllegalArgumentException e) {
                 e.printStackTrace();
             }
@@ -77,7 +75,7 @@ public class OAuthUtils {
     	String payload = token.getPayload();
     	String signature = token.getSignature();
     	String algo = token.getAlg();
-    	if (algo.equals("RS256")) {
+    	if ("RS256".equals(algo)) {
     		byte[] decoded = Base64.decodeBase64(tokenPublicKey);
     		X509EncodedKeySpec spec =
     	            new X509EncodedKeySpec(decoded);
@@ -95,7 +93,7 @@ public class OAuthUtils {
     	    	e.printStackTrace();
     	    	return false;
     	    }
-    	} else if (algo.equals("HS256")) {
+    	} else if ("HS256".equals(algo)) {
     		// TODO
     	} // and so on
     		

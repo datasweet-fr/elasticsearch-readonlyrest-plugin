@@ -61,9 +61,6 @@ public class OAuthToken {
 
 	private final Logger logger = Loggers.getLogger(getClass());
 
-	public OAuthToken() {
-	}
-
 	public String getAlg() {
 		return alg;
 	}
@@ -144,19 +141,19 @@ public class OAuthToken {
 		this.azp = azp;
 	}
 
-	public int getAuth_time() {
+	public int getAuthTime() {
 		return auth_time;
 	}
 
-	public void setAuth_time(int auth_time) {
+	public void setAuthTime(int auth_time) {
 		this.auth_time = auth_time;
 	}
 
-	public String getSession_state() {
+	public String getSessionState() {
 		return session_state;
 	}
 
-	public void setSession_state(String session_state) {
+	public void setSessionState(String session_state) {
 		this.session_state = session_state;
 	}
 
@@ -168,19 +165,19 @@ public class OAuthToken {
 		this.acr = acr;
 	}
 
-	public String getClient_session() {
+	public String getClientSession() {
 		return client_session;
 	}
 
-	public void setClient_session(String client_session) {
+	public void setClientSession(String client_session) {
 		this.client_session = client_session;
 	}
 
-	public ArrayList<String> getAllowed_origins() {
+	public ArrayList<String> getAllowedOrigins() {
 		return allowed_origins;
 	}
 
-	public void setAllowed_origins(ArrayList<String> allowed_origins) {
+	public void setAllowedOrigins(ArrayList<String> allowed_origins) {
 		this.allowed_origins = allowed_origins;
 	}
 
@@ -200,11 +197,11 @@ public class OAuthToken {
 		this.name = name;
 	}
 
-	public String getPreferred_username() {
+	public String getPreferredUsername() {
 		return preferred_username;
 	}
 
-	public void setPreferred_username(String preferred_username) {
+	public void setPreferredUsername(String preferred_username) {
 		this.preferred_username = preferred_username;
 	}
 
@@ -240,7 +237,7 @@ public class OAuthToken {
 		this.signature = signature;
 	}
 
-	public OAuthToken parseEncryptedJWT(String jwt, String secret) {
+	public OAuthToken parseEncryptedJWT(String jwt, String secret, String clientId) {
 		String token;
 		try {
 			token = Jiron.unseal(jwt, secret, Jiron.DEFAULT_ENCRYPTION_OPTIONS, Jiron.DEFAULT_INTEGRITY_OPTIONS);
@@ -248,10 +245,10 @@ public class OAuthToken {
 			logger.error("Error while deciphering token " + e.getMessage());
 			return null;
 		}
-		return parseDecryptedJWT(token);
+		return parseDecryptedJWT(token, clientId);
 	}
 
-	public OAuthToken parseDecryptedJWT(String decryptedCookie) {
+	public OAuthToken parseDecryptedJWT(String decryptedCookie, String clientId) {
 		String[] cookie = decryptedCookie.split("\\:");
 		String token = cookie[1];
 		token = token.substring(1, token.length());
@@ -265,7 +262,7 @@ public class OAuthToken {
 			this.signature = RSASignature.substring(0, RSASignature.indexOf("\""));
 			try {
 				parseHeader(header);
-				parsePayload(payload);
+				parsePayload(payload, clientId);
 			} catch (UnsupportedEncodingException e) {
 				logger.error("Error while base64 decoding the token " + e.getMessage());
 				return null;
@@ -286,7 +283,7 @@ public class OAuthToken {
 		logger.debug("END parsing OAuth token payload");
 	}
 
-	private void parsePayload(String payload) throws UnsupportedEncodingException {
+	private void parsePayload(String payload, String clientId) throws UnsupportedEncodingException {
 		logger.debug("BEGIN parsing OAuth token payload");
 		JSONObject obj = null;
 
@@ -301,15 +298,10 @@ public class OAuthToken {
 			this.setAud(obj.getString("aud"));
 			this.setAzp(obj.getString("azp"));
 			JSONArray rolesJson = new JSONArray();
-			if (this.aud != null) {
-				rolesJson = obj.getJSONObject("resource_access").getJSONObject(this.aud).getJSONArray("roles");
-			} else if (this.azp != null) {
-				rolesJson = obj.getJSONObject("resource_access").getJSONObject(this.azp).getJSONArray("roles");
-			}
+			rolesJson = obj.getJSONObject("resource_access").getJSONObject(clientId).getJSONArray("roles");
 			ArrayList<String> rolesList = new ArrayList<String>();
 			rolesJson.forEach(role -> {
 				rolesList.add((String) role);
-				// System.out.println(role);
 			});
 			this.setRoles(rolesList);
 			this.setJti(obj.getString("jti"));
@@ -318,10 +310,10 @@ public class OAuthToken {
 			this.setIss(obj.getString("iss"));
 			this.setSub(obj.getString("sub"));
 			this.setTyp(obj.getString("typ"));
-			this.setSession_state(obj.getString("session_state"));
-			this.setClient_session(obj.getString("client_session"));
+			this.setSessionState(obj.getString("session_state"));
+			this.setClientSession(obj.getString("client_session"));
 			this.setName(obj.getString("name"));
-			this.setPreferred_username(obj.getString("preferred_username"));
+			this.setPreferredUsername(obj.getString("preferred_username"));
 		} catch (JSONException ex) {
 			logger.error("Error while parsing json OAuth Token " + ex.getLocalizedMessage());
 		}

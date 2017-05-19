@@ -128,15 +128,10 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
     if (conf.oauthEnabled) {
 	    OAuthToken token = OAuthUtils.getOAuthToken(rc.getHeaders(), conf);
 	    rc.setToken(token);
-	    if (token != null)
-	    	rc.setLoggedInUser(new LoggedUser(token.getPreferred_username()));
-	    else
-	    	rc.setLoggedInUser(new LoggedUser("Kibana"));
     }
     conf.acl.check(rc)
-
       .exceptionally(throwable -> {
-        logger.info("forbidden request: " + rc + " Reason: " + throwable.getMessage());
+        logger.warn("forbidden request: " + rc + " Reason: " + throwable.getMessage());
         if (throwable.getCause() instanceof ResourceNotFoundException) {
           logger.warn("Resource not found! ID: " + rc.getId() + "  " + throwable.getCause().getMessage());
           sendNotFound((ResourceNotFoundException) throwable.getCause(), channel);

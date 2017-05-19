@@ -25,7 +25,7 @@ public class Base64 extends BaseNCodec {
     private static final int BYTES_PER_UNENCODED_BLOCK = 3;
     private static final int BYTES_PER_ENCODED_BLOCK = 4;
 
-    static final byte[] CHUNK_SEPARATOR = {'\r', '\n'};
+    private static final byte[] CHUNK_SEPARATOR = {'\r', '\n'};
 
     private static final byte[] STANDARD_ENCODE_TABLE = {
             'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
@@ -119,7 +119,7 @@ public class Base64 extends BaseNCodec {
     }
 
     @Override
-    void encode(byte[] in, int inPos, int inAvail, Context context) {
+    public void encode(byte[] in, int inPos, int inAvail, Context context) {
         if (context.eof) {
             return;
         }
@@ -337,7 +337,7 @@ public class Base64 extends BaseNCodec {
         return encodeBase64(toIntegerBytes(bigInt), false);
     }
 
-    static byte[] toIntegerBytes(BigInteger bigInt) {
+    private static byte[] toIntegerBytes(BigInteger bigInt) {
         int bitlen = bigInt.bitLength();
         // round bitlen
         bitlen = ((bitlen + 7) >> 3) << 3;
