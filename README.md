@@ -33,7 +33,7 @@ Append either of these snippets to `conf/elasticsearch.yml`
 ```yml
 readonlyrest:
     enable: true
-    access_control_rules: 
+    template_rules: 
     
     - name: "Accept all requests from localhost"
       type: allow
@@ -66,7 +66,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Sorry, your request is forbidden.
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept all requests from localhost
       type: allow
@@ -91,7 +91,7 @@ readonlyrest:
 
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
 
-    access_control_rules:
+    template_rules:
 
     - name: "::LOGSTASH::"
       # auth_key is good for testing, but replace it with `auth_key_sha1`!
@@ -141,7 +141,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept requests from users in group team1 on index1
       type: allow
@@ -182,7 +182,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept requests from users in group team1 on index1
       type: allow
@@ -230,7 +230,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept requests from users in group team1 on index1
       type: allow
@@ -293,7 +293,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
     
     - name: "::Tweets::"
       type: allow
@@ -337,7 +337,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: "::Tweets::"
       type: allow
