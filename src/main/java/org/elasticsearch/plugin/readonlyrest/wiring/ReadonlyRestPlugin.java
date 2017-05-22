@@ -198,8 +198,8 @@ public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPl
 			  } catch (InstantiationException | IllegalAccessException | IllegalArgumentException
 						| InvocationTargetException e) {
 				  logger.error("Error while trying to set the IndexSearch Wrapper");
-				  logger.error(e.getLocalizedMessage());
 				  logger.error("Using empty one instead");
+				  logger.error(e.getLocalizedMessage());
 			  }
 			  return new EmptyIndexSearchWrapper(indexService, this.settings);
 		  });
