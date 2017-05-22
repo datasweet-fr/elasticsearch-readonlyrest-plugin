@@ -39,6 +39,7 @@ import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.utils.OAuthUtils;
+import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 import org.elasticsearch.plugin.readonlyrest.wiring.ThreadRepo;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 import org.elasticsearch.rest.BytesRestResponse;
@@ -127,6 +128,10 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
     if (conf.oauthEnabled) {
 	    OAuthToken token = OAuthUtils.getOAuthToken(rc.getHeaders(), conf);
 	    rc.setToken(token);
+	    if (token != null) {
+	    	if (threadPool.getThreadContext().getTransient(ThreadConstants.userGroup) == null)
+	    		threadPool.getThreadContext().putTransient(ThreadConstants.userGroup, token.getRoles());
+	    }
     }
     conf.acl.check(rc)
       .exceptionally(throwable -> {
