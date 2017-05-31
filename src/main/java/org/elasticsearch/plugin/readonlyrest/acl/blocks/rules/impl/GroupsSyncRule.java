@@ -97,7 +97,7 @@ public class GroupsSyncRule extends SyncRule {
 			return MATCH;
 		if (commonGroups == null || commonGroups.isEmpty() || token == null || token.getRoles() == null)
 			return NO_MATCH;
-		commonGroups.retainAll(token.getRoles());
+		//commonGroups.retainAll(token.getRoles());
 		// Using a set to remove all duplicates
 		Set<String> commonGroupsSet = new HashSet<>(commonGroups);
 		commonGroupsSet.retainAll(token.getRoles());
