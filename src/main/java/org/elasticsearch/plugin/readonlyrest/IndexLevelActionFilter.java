@@ -125,14 +125,6 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
 
     RequestContext rc = new RequestContext(channel, req, action, request, clusterService, indexResolver, threadPool);
-    if (conf.oauthEnabled) {
-	    OAuthToken token = OAuthUtils.getOAuthToken(rc.getHeaders(), conf);
-	    rc.setToken(token);
-	    if (token != null) {
-	    	if (threadPool.getThreadContext().getTransient(ThreadConstants.userGroup) == null)
-	    		threadPool.getThreadContext().putTransient(ThreadConstants.userGroup, token.getRoles());
-	    }
-    }
     conf.acl.check(rc)
       .exceptionally(throwable -> {
         logger.warn("forbidden request: " + rc + " Reason: " + throwable.getMessage());
@@ -148,7 +140,11 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
       .thenApply(result -> {
         assert result != null;
-
+        OAuthToken token = rc.getToken();
+        if (token != null) {
+        	if (threadPool.getThreadContext().getTransient(ThreadConstants.userGroup) == null)
+        		threadPool.getThreadContext().putTransient(ThreadConstants.userGroup, token.getRoles());
+        }
         if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
           try {
             @SuppressWarnings("unchecked")
@@ -174,17 +170,7 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
     String reason = conf.forbiddenResponse;
 
     BytesRestResponse resp;
-    if (!conf.oauthEnabled) {
-      if (ConfigurationHelper.doesRequirePassword()) {
-        resp = new BytesRestResponse(RestStatus.UNAUTHORIZED, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
-        logger.debug("Sending login prompt header...");
-        resp.addHeader("WWW-Authenticate", "Basic");
-      }
-      else {
-        resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
-      }
-    } else
-      resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
+    resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
 
     channel.sendResponse(resp);
   }

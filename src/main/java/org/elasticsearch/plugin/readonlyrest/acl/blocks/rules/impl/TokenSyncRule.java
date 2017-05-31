@@ -25,29 +25,36 @@ import java.util.Optional;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
 import org.elasticsearch.plugin.readonlyrest.acl.LoggedUser;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
+import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.utils.OAuthUtils;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 
 public class TokenSyncRule extends SyncRule {
     private final Logger logger = Loggers.getLogger(getClass());
-    private final Boolean needToCheckRule;
-
-    public TokenSyncRule(Settings s) throws RuleNotConfiguredException {
+//    private final Boolean needToCheckRule;
+    private final String cookieSecret;
+    private final String cookieName;
+    private final String tokenClientId;
+    private final String tokenSecret;
+    
+    public TokenSyncRule(Settings s, ConfigurationHelper conf) throws RuleNotConfiguredException {
         super();
-        String tokenCheck = s.get("token", "TRUE");
-        // if this param is set to false
-        // we do not need to check the token
-        // usefull when we want to bypass kibana health status pings
-        needToCheckRule = Boolean.parseBoolean(tokenCheck);        
+        if (s.get("auth_oauth", "").equals(""))
+        	throw new RuleNotConfiguredException();
+        cookieSecret = conf.cookieSecret;
+        cookieName = conf.cookieName;
+        tokenClientId = conf.tokenClientId;
+        tokenSecret = conf.tokenSecret;
     }
 
-    public static Optional<TokenSyncRule> fromSettings(Settings s) {
+    public static Optional<TokenSyncRule> fromSettings(Settings s, ConfigurationHelper conf) {
 		try {
-			return Optional.of(new TokenSyncRule(s));
+			return Optional.of(new TokenSyncRule(s, conf));
 		} catch (RuleNotConfiguredException e) {
 			return Optional.empty();
 		}
@@ -55,24 +62,19 @@ public class TokenSyncRule extends SyncRule {
 
 	@Override
 	public RuleExitResult match(RequestContext rc) {
-		logger.debug("BEGIN Check token");
-        if (!needToCheckRule && rc.getToken() == null) {
-        	rc.setLoggedInUser(new LoggedUser("Kibana"));
-           return MATCH;
-        }
-        if (rc.getToken() == null)
-            return NO_MATCH;
-        boolean valid = true;
-        valid &= OAuthUtils.verifyTokenIntegrity(rc.getToken(), rc.getToken().getPublicKey());
-        // expiration date check
-        Date expDate = rc.getToken().getExp();
-        Date now = Calendar.getInstance().getTime();
-        valid &= expDate.after(now);
-        // Save the status of the token for later
-        rc.getToken().setValid(valid);
-        rc.setLoggedInUser(new LoggedUser(rc.getToken().getPreferredUsername()));
-        logger.debug("END Check token");
-        return valid ? MATCH : NO_MATCH;
+		OAuthToken token = OAuthUtils.getOAuthToken(rc.getHeaders(), this.cookieName, this.cookieSecret, this.tokenClientId, this.tokenSecret);
+		rc.setToken(token);
+		if (token == null) {
+			rc.setLoggedInUser(new LoggedUser("Kibana"));
+			return NO_MATCH;
+		}
+		boolean valid = true;
+		valid &= OAuthUtils.verifyTokenIntegrity(token, token.getPublicKey());
+		Date expDate = token.getExp();
+		Date now = Calendar.getInstance().getTime();
+		valid &= expDate.after(now);
+		rc.getToken().setValid(valid);
+		rc.setLoggedInUser(new LoggedUser(token.getPreferredUsername()));
+		return valid ? MATCH : NO_MATCH;
 	}
-
 }

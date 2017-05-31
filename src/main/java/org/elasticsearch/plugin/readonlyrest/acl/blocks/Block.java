@@ -87,7 +87,8 @@ public class Block {
                List<ProxyAuthConfig> proxyAuthConfigs,
                List<UserGroupProviderConfig> groupsProviderConfigs,
                List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs,
-               Group grp, Logger logger) {
+               Group grp, Logger logger,
+               ConfigurationHelper conf) {
     this.name = settings.get("name");
     String sPolicy = settings.get("type", Policy.ALLOW.name());
     this.logger = logger;
@@ -107,13 +108,13 @@ public class Block {
     	if (group.toLowerCase().equals(grp.getType().toString().toLowerCase())) {
     		this.name = "[" + grp.getGroup() + "]" + settings.get("name");
     		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
-    					externalAuthenticationServiceConfigs, grp);
+    					externalAuthenticationServiceConfigs, grp, conf);
         	break;
     	}
     	else {
     		this.name = settings.get("name");
     		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
-    					externalAuthenticationServiceConfigs, null);
+    					externalAuthenticationServiceConfigs, null, conf);
     	}
     }
     //conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
@@ -196,7 +197,8 @@ public class Block {
 
   private Set<AsyncRule> collectRules(Settings s, List<User> userList, List<ProxyAuthConfig> proxyAuthConfigs,
       LdapConfigs ldapConfigs, List<UserGroupProviderConfig> groupsProviderConfigs,
-                                      List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs, Group grp) {
+                                      List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs, Group grp,
+                                      ConfigurationHelper conf) {
     Set<AsyncRule> rules = Sets.newLinkedHashSet();
     // Won't add the condition if its configuration is not found
 
@@ -206,8 +208,7 @@ public class Block {
     AuthKeySha1SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     AuthKeySha256SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     ProxyAuthSyncRule.fromSettings(s, proxyAuthConfigs).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    if (ConfigurationHelper.isOAuthEnabled())
-    	TokenSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+	TokenSyncRule.fromSettings(s, conf).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
     // Inspection rules next; these act based on properties
     // of the request.
     KibanaAccessSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);

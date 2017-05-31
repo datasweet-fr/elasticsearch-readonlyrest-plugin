@@ -52,17 +52,17 @@ public class OAuthUtils {
         return interestingPart;
     }
 
-    public static OAuthToken getOAuthToken(Map<String, String> headers, ConfigurationHelper conf) {
-        String tokenCookie = extractTokenFromCookie(headers.get("Cookie"), conf.cookieName);
+    public static OAuthToken getOAuthToken(Map<String, String> headers, String cookieName, String cookieSecret, String tokenClientId, String tokenSecret) {
+        String tokenCookie = extractTokenFromCookie(headers.get("Cookie"), cookieName);
         String tokenHeader = extractTokenFromHeader(headers.get("Authorization"));
         OAuthToken oAuthToken = new OAuthToken();
-        oAuthToken.setPublicKey(conf.tokenSecret);
+        oAuthToken.setPublicKey(tokenSecret);
         if (!Strings.isNullOrEmpty(tokenCookie)) {
-            return oAuthToken.parseEncryptedJWT(tokenCookie, conf.cookieSecret, conf.tokenClientId);
+            return oAuthToken.parseEncryptedJWT(tokenCookie, cookieSecret, tokenClientId);
         }
         else if (!Strings.isNullOrEmpty(tokenHeader)) {
             try {
-                return oAuthToken.parseDecryptedJWT(tokenHeader, conf.tokenClientId);
+                return oAuthToken.parseDecryptedJWT(tokenHeader, tokenClientId);
             } catch (IllegalArgumentException e) {
                 e.printStackTrace();
             }

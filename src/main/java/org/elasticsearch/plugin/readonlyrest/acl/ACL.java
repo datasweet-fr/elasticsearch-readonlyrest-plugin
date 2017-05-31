@@ -32,6 +32,7 @@ import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.ExternalAuthe
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.ProxyAuthConfig;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl.UserGroupProviderConfig;
 import org.elasticsearch.plugin.readonlyrest.utils.FuturesSequencer;
+import org.elasticsearch.plugin.readonlyrest.utils.RequestUtils;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.Verbosity;
 
@@ -99,7 +100,7 @@ public class ACL {
     viewerGroups.forEach(grp -> {
 		for (Integer i = 0; i < blocksMap.size(); i++) {
 			Block block = new Block(blocksMap.get(i.toString()), users, ldaps,
-					proxyAuthConfigs, groupsProviderConfigs, externalAuthenticationServiceConfigs, grp, logger);
+					proxyAuthConfigs, groupsProviderConfigs, externalAuthenticationServiceConfigs, grp, logger, conf);
 			if (block.isKibanaRule()) {
 				if (!kibanaBlocks.contains(block))
 					kibanaBlocks.add(block);
@@ -112,7 +113,7 @@ public class ACL {
 	editorGroups.forEach(grp -> {
 		for (Integer i = 0; i < blocksMap.size(); i++) {
 			Block block = new Block(blocksMap.get(i.toString()), users, ldaps,
-					proxyAuthConfigs, groupsProviderConfigs, externalAuthenticationServiceConfigs, grp, logger);
+					proxyAuthConfigs, groupsProviderConfigs, externalAuthenticationServiceConfigs, grp, logger, conf);
 			if (block.isKibanaRule()) {
 				if (!kibanaBlocks.contains(block))
 					kibanaBlocks.add(block);
@@ -145,7 +146,10 @@ public class ACL {
         Verbosity v = rc.getVerbosity();
         if (checkResult.isMatch()) {
           if (v.equals(Verbosity.INFO)) {
-            logger.info("request: " + rc + " matched block: " + checkResult);
+        	  if (!RequestUtils.isKibanaPingRequest(rc))
+        		  logger.info("request: " + rc + " matched block: " + checkResult);
+        	  else
+        		  logger.debug("request: " + rc + " matched block: " + checkResult);
           }
           if(checkResult.getBlock().getPolicy().equals(Block.Policy.ALLOW)){
             rc.commit();
