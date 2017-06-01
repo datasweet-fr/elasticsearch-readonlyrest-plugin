@@ -91,21 +91,23 @@ public class ACL {
 
 		Map<String, Settings> groupsMap = s.getGroups(RULES_PREFIX);
 		groupsMap.entrySet().forEach(rule -> {
-			Group grp = new Group(rule.getValue());
+			Group grp = new Group(rule.getValue(), logger);
 			rulesList.add(grp);
 		});
 
 		rulesList.forEach(rule -> {
-			List<Settings> groupSettings = groupSettingsTpl.get(rule.getType().toString());
-			if (groupSettings == null || groupSettings.isEmpty()) {
-				logger.warn("No Template found for key: " + rule.getType().toString());
-			} else {
-				groupSettings.forEach(setting -> {
-					Block b = new Block(setting, users, ldaps, proxyAuthConfigs, groupsProviderConfigs,
-							externalAuthenticationServiceConfigs, rule, logger, conf);
-					blocks.add(b);
-					logger.info("Adding rule:\t" + b);
-				});
+			if (rule.getType() != null) {
+				List<Settings> groupSettings = groupSettingsTpl.get(rule.getType().toString());
+				if (groupSettings == null || groupSettings.isEmpty()) {
+					logger.warn("No Template found for key: " + rule.getType().toString());
+				} else {
+					groupSettings.forEach(setting -> {
+						Block b = new Block(setting, users, ldaps, proxyAuthConfigs, groupsProviderConfigs,
+								externalAuthenticationServiceConfigs, rule, logger, conf);
+						blocks.add(b);
+						logger.info("Adding rule:\t" + b);
+					});
+				}
 			}
 		});
 	}

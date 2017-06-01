@@ -20,6 +20,7 @@ package org.elasticsearch.plugin.readonlyrest.acl.blocks;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.settings.Settings;
 
 public class Group {
@@ -31,13 +32,18 @@ public class Group {
 	public static final String EDITOR = "Editor";
 	public static final String VIEWER = "Viewer";
 	public static final String KIBANA = "Kibana";
-	
-	public Group(Settings s) {
+
+	public Group(Settings s, Logger logger) {
 		if (s != null) {
-			this.type = TYPE.valueOf(s.get("type").toUpperCase());
-			this.group = s.get("group");
-			this.indices = Arrays.asList(s.getAsArray("indices"));
-			this.filters = Arrays.asList(s.getAsArray("filters"));
+			try {
+				this.type = TYPE.valueOf(s.get("type").toUpperCase());
+				this.group = s.get("group");
+				this.indices = Arrays.asList(s.getAsArray("indices"));
+				this.filters = Arrays.asList(s.getAsArray("filters"));
+			} catch (Exception e) {
+				logger.warn("Impossible to parse rule: Group=\"" + s.get("group") + "\", type=\"" + s.get("type") + "\"");
+				return;
+			}
 		}
 	}
 
@@ -52,33 +58,27 @@ public class Group {
 	public List<String> getIndices() {
 		return indices;
 	}
-	
-	public enum TYPE {
-		VIEWER,
-		EDITOR,
-		ADMIN,
-		KIBANA;
-		
-		public String valuesString() {
-            StringBuilder sb = new StringBuilder();
-            for (TYPE v : values()) {
-                sb.append(v.toString()).append(",");
-            }
-            sb.deleteCharAt(sb.length() - 1);
-            return sb.toString();
-        }
-	};
 
+	public enum TYPE {
+		VIEWER, EDITOR, ADMIN, KIBANA;
+
+		public String valuesString() {
+			StringBuilder sb = new StringBuilder();
+			for (TYPE v : values()) {
+				sb.append(v.toString()).append(",");
+			}
+			sb.deleteCharAt(sb.length() - 1);
+			return sb.toString();
+		}
+	};
 
 	public void setIndices(List<String> indices) {
 		this.indices = indices;
 	}
 
-
 	public TYPE getType() {
 		return type;
 	}
-
 
 	public void setType(TYPE type) {
 		this.type = type;
