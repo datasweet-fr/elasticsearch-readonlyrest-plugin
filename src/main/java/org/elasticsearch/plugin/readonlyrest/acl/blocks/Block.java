@@ -74,202 +74,172 @@ import com.google.common.collect.Sets;
  * Created by sscarduzio on 13/02/2016.
  */
 public class Block {
-  private String name;
-  private final Policy policy;
-  private final Logger logger;
-  private Set<AsyncRule> conditionsToCheck;
-  private boolean authHeaderAccepted;
-  private boolean isKibanaRule = false;
-  
-  public Block(Settings settings,
-               List<User> userList,
-               LdapConfigs ldapConfigs,
-               List<ProxyAuthConfig> proxyAuthConfigs,
-               List<UserGroupProviderConfig> groupsProviderConfigs,
-               List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs,
-               Group grp, Logger logger,
-               ConfigurationHelper conf) {
-    this.name = settings.get("name");
-    String sPolicy = settings.get("type", Policy.ALLOW.name());
-    this.logger = logger;
+	private final String name;
+	private final Policy policy;
+	private final Logger logger;
+	private Set<AsyncRule> conditionsToCheck;
+	private boolean authHeaderAccepted;
+	private boolean isKibanaRule = false;
 
-    policy = Block.Policy.valueOf(sPolicy.toUpperCase());
+	public Block(Settings settings, List<User> userList, LdapConfigs ldapConfigs,
+			List<ProxyAuthConfig> proxyAuthConfigs, List<UserGroupProviderConfig> groupsProviderConfigs,
+			List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs, Group grp, Logger logger,
+			ConfigurationHelper conf) {
+		// this.name = settings.get("name");
+		String sPolicy = settings.get("type", Policy.ALLOW.name());
+		this.logger = logger;
 
-    String[] grpRule = settings.getAsArray("groups");
-    // We flag the rule if it's a Kibana one as
-    // we'll process it more specifically
-    if (grpRule != null && grpRule.length > 0 && grpRule[0].equals("Kibana"))
-    	this.isKibanaRule = true;
-    // For each rule, we check if there is a
-    // template associated to the rule
-    // Then we modify the rule name to make it more distinct
-    for (int i = 0; i < grpRule.length; i++) {
-    	String group = grpRule[i];
-    	if (group.toLowerCase().equals(grp.getType().toString().toLowerCase())) {
-    		this.name = "[" + grp.getGroup() + "]" + settings.get("name");
-    		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
-    					externalAuthenticationServiceConfigs, grp, conf);
-        	break;
-    	}
-    	else {
-    		this.name = settings.get("name");
-    		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
-    					externalAuthenticationServiceConfigs, null, conf);
-    	}
-    }
-    //conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
-    //    externalAuthenticationServiceConfigs);
-    authHeaderAccepted = conditionsToCheck.stream().anyMatch(this::isAuthenticationRule);
-  }
+		policy = Block.Policy.valueOf(sPolicy.toUpperCase());
 
-  public Set<AsyncRule> getRules() {
-    return conditionsToCheck;
-  }
+		// We flag the rule if it's a Kibana one as
+		// we'll process it more specifically
+		if (grp != null && grp.getType().toString().toLowerCase().equals("kibana"))
+			this.isKibanaRule = true;
+		this.name = "[" + grp.getGroup() + "]" + settings.get("name");
+		conditionsToCheck = collectRules(settings, userList, proxyAuthConfigs, ldapConfigs, groupsProviderConfigs,
+				externalAuthenticationServiceConfigs, grp, conf);
+		authHeaderAccepted = conditionsToCheck.stream().anyMatch(this::isAuthenticationRule);
+	}
 
-  public String getName() {
-    return name;
-  }
+	public Set<AsyncRule> getRules() {
+		return conditionsToCheck;
+	}
 
-  public Policy getPolicy() {
-    return policy;
-  }
+	public String getName() {
+		return name;
+	}
 
-  public boolean isAuthHeaderAccepted() {
-    return authHeaderAccepted;
-  }
+	public Policy getPolicy() {
+		return policy;
+	}
 
-  /*
-   * Check all the conditions of this rule and return a rule exit result
-   *
-   */
-  public CompletableFuture<BlockExitResult> check(RequestContext rc) {
-    return checkAsyncRules(rc)
-        .thenApply(asyncCheck -> {
-          if (asyncCheck != null && asyncCheck) {
-            return finishWithMatchResult(rc);
-          }
-          else {
-            return finishWithNoMatchResult(rc);
-          }
-        });
-  }
+	public boolean isAuthHeaderAccepted() {
+		return authHeaderAccepted;
+	}
 
-  private CompletableFuture<Boolean> checkAsyncRules(RequestContext rc) {
-    // async rules should be checked in sequence due to interaction with not thread safe objects like RequestContext
-    Set<RuleExitResult> thisBlockHistory = new HashSet<>(conditionsToCheck.size());
-    return checkAsyncRulesInSequence(rc, conditionsToCheck.iterator(), thisBlockHistory)
-        .thenApply(result -> {
-          rc.addToHistory(this, thisBlockHistory);
-          return result;
-        });
-  }
+	/*
+	 * Check all the conditions of this rule and return a rule exit result
+	 *
+	 */
+	public CompletableFuture<BlockExitResult> check(RequestContext rc) {
+		return checkAsyncRules(rc).thenApply(asyncCheck -> {
+			if (asyncCheck != null && asyncCheck) {
+				return finishWithMatchResult(rc);
+			} else {
+				return finishWithNoMatchResult(rc);
+			}
+		});
+	}
 
-  private CompletableFuture<Boolean> checkAsyncRulesInSequence(RequestContext rc,
-      Iterator<AsyncRule> rules,
-      Set<RuleExitResult> thisBlockHistory) {
-    return FuturesSequencer.runInSeqUntilConditionIsUndone(
-        rules,
-        rule -> rule.match(rc),
-        ruleExitResult -> {
-          thisBlockHistory.add(ruleExitResult);
-          return !ruleExitResult.isMatch();
-        },
-        RuleExitResult::isMatch,
-        nothing -> true
-    );
-  }
+	private CompletableFuture<Boolean> checkAsyncRules(RequestContext rc) {
+		// async rules should be checked in sequence due to interaction with not
+		// thread safe objects like RequestContext
+		Set<RuleExitResult> thisBlockHistory = new HashSet<>(conditionsToCheck.size());
+		return checkAsyncRulesInSequence(rc, conditionsToCheck.iterator(), thisBlockHistory).thenApply(result -> {
+			rc.addToHistory(this, thisBlockHistory);
+			return result;
+		});
+	}
 
-  private BlockExitResult finishWithMatchResult(RequestContext rc) {
-    logger.debug(ANSI_CYAN + "matched " + this + ANSI_RESET);
+	private CompletableFuture<Boolean> checkAsyncRulesInSequence(RequestContext rc, Iterator<AsyncRule> rules,
+			Set<RuleExitResult> thisBlockHistory) {
+		return FuturesSequencer.runInSeqUntilConditionIsUndone(rules, rule -> rule.match(rc), ruleExitResult -> {
+			thisBlockHistory.add(ruleExitResult);
+			return !ruleExitResult.isMatch();
+		}, RuleExitResult::isMatch, nothing -> true);
+	}
 
-    return BlockExitResult.match(this);
-  }
+	private BlockExitResult finishWithMatchResult(RequestContext rc) {
+		logger.debug(ANSI_CYAN + "matched " + this + ANSI_RESET);
 
-  private BlockExitResult finishWithNoMatchResult(RequestContext rc) {
-    logger.debug(ANSI_YELLOW + "[" + name + "] the request matches no rules in this block: " + rc + ANSI_RESET);
-    return BlockExitResult.noMatch();
-  }
+		return BlockExitResult.match(this);
+	}
 
-  @Override
-  public String toString() {
-    return "readonlyrest Rules Block :: { name: '" + name + "', policy: " + policy + "}";
-  }
+	private BlockExitResult finishWithNoMatchResult(RequestContext rc) {
+		logger.debug(ANSI_YELLOW + "[" + name + "] the request matches no rules in this block: " + rc + ANSI_RESET);
+		return BlockExitResult.noMatch();
+	}
 
-  private Set<AsyncRule> collectRules(Settings s, List<User> userList, List<ProxyAuthConfig> proxyAuthConfigs,
-      LdapConfigs ldapConfigs, List<UserGroupProviderConfig> groupsProviderConfigs,
-                                      List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs, Group grp,
-                                      ConfigurationHelper conf) {
-    Set<AsyncRule> rules = Sets.newLinkedHashSet();
-    // Won't add the condition if its configuration is not found
+	@Override
+	public String toString() {
+		return "readonlyrest Rules Block :: { name: '" + name + "', policy: " + policy + "}";
+	}
 
-    // Authentication rules must come first because they set the user
-    // information which further rules might rely on.
-    AuthKeySyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    AuthKeySha1SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    AuthKeySha256SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    ProxyAuthSyncRule.fromSettings(s, proxyAuthConfigs).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-	TokenSyncRule.fromSettings(s, conf).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    // Inspection rules next; these act based on properties
-    // of the request.
-    KibanaAccessSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    HostsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    XForwardedForSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    ApiKeysSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    SessionMaxIdleSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    UriReSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    MaxBodyLengthSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    MethodsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    IndicesSyncRule.fromSettings(s, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    ActionsSyncRule.fromSettings(s, null).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    GroupsSyncRule.fromSettings(s, userList, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    SearchlogSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    VerbositySyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-    // then we could check potentially slow async rules
-    LdapAuthAsyncRule.fromSettings(s, ldapConfigs).ifPresent(rules::add);
-    LdapAuthenticationAsyncRule.fromSettings(s, ldapConfigs)
-                               .map(rule -> wrapInCacheIfCacheIsEnabled(rule, s)).ifPresent(rules::add);
-    ExternalAuthenticationAsyncRule.fromSettings(s, externalAuthenticationServiceConfigs)
-        .map(rule -> wrapInCacheIfCacheIsEnabled(rule, s)).ifPresent(rules::add);
+	private Set<AsyncRule> collectRules(Settings s, List<User> userList, List<ProxyAuthConfig> proxyAuthConfigs,
+			LdapConfigs ldapConfigs, List<UserGroupProviderConfig> groupsProviderConfigs,
+			List<ExternalAuthenticationServiceConfig> externalAuthenticationServiceConfigs, Group grp,
+			ConfigurationHelper conf) {
+		Set<AsyncRule> rules = Sets.newLinkedHashSet();
+		// Won't add the condition if its configuration is not found
 
-    // all authorization rules should be placed before any authentication rule
-    LdapAuthorizationAsyncRule.fromSettings(s, ldapConfigs)
-                              .map(rule -> wrapInCacheIfCacheIsEnabled(rule, s)).ifPresent(rules::add);
-    GroupsProviderAuthorizationAsyncRule.fromSettings(s, groupsProviderConfigs)
-                                        .map(rule -> wrapInCacheIfCacheIsEnabled(rule, s)).ifPresent(rules::add);
+		// Authentication rules must come first because they set the user
+		// information which further rules might rely on.
+		AuthKeySyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		AuthKeySha1SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		AuthKeySha256SyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		ProxyAuthSyncRule.fromSettings(s, proxyAuthConfigs).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		TokenSyncRule.fromSettings(s, conf).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		// Inspection rules next; these act based on properties
+		// of the request.
+		KibanaAccessSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		HostsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		XForwardedForSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		ApiKeysSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		SessionMaxIdleSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		UriReSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		MaxBodyLengthSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		MethodsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		IndicesSyncRule.fromSettings(s, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		ActionsSyncRule.fromSettings(s, null).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		GroupsSyncRule.fromSettings(s, userList, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		SearchlogSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		VerbositySyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		// then we could check potentially slow async rules
+		LdapAuthAsyncRule.fromSettings(s, ldapConfigs).ifPresent(rules::add);
+		LdapAuthenticationAsyncRule.fromSettings(s, ldapConfigs).map(rule -> wrapInCacheIfCacheIsEnabled(rule, s))
+				.ifPresent(rules::add);
+		ExternalAuthenticationAsyncRule.fromSettings(s, externalAuthenticationServiceConfigs)
+				.map(rule -> wrapInCacheIfCacheIsEnabled(rule, s)).ifPresent(rules::add);
 
-    // At the end the sync rule chain are those that can mutate
-    // the client request.
-    IndicesRewriteSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		// all authorization rules should be placed before any authentication
+		// rule
+		LdapAuthorizationAsyncRule.fromSettings(s, ldapConfigs).map(rule -> wrapInCacheIfCacheIsEnabled(rule, s))
+				.ifPresent(rules::add);
+		GroupsProviderAuthorizationAsyncRule.fromSettings(s, groupsProviderConfigs)
+				.map(rule -> wrapInCacheIfCacheIsEnabled(rule, s)).ifPresent(rules::add);
 
-    return rules;
-  }
+		// At the end the sync rule chain are those that can mutate
+		// the client request.
+		IndicesRewriteSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
 
-  private boolean isAuthenticationRule(AsyncRule rule) {
-    return rule instanceof Authentication ||
-        (rule instanceof AsyncRuleAdapter && ((AsyncRuleAdapter) rule).getUnderlying() instanceof Authentication);
-  }
+		return rules;
+	}
 
-  public boolean isKibanaRule() {
-	return isKibanaRule;
-  }
+	private boolean isAuthenticationRule(AsyncRule rule) {
+		return rule instanceof Authentication || (rule instanceof AsyncRuleAdapter
+				&& ((AsyncRuleAdapter) rule).getUnderlying() instanceof Authentication);
+	}
 
-  public void setKibanaRule(boolean isKibanaRule) {
-	this.isKibanaRule = isKibanaRule;
-  }
+	public boolean isKibanaRule() {
+		return isKibanaRule;
+	}
 
+	public void setKibanaRule(boolean isKibanaRule) {
+		this.isKibanaRule = isKibanaRule;
+	}
 
-public enum Policy {
-    ALLOW, FORBID;
+	public enum Policy {
+		ALLOW, FORBID;
 
-    public static String valuesString() {
-      StringBuilder sb = new StringBuilder();
-      for (Policy v : values()) {
-        sb.append(v.toString()).append(",");
-      }
-      sb.deleteCharAt(sb.length() - 1);
-      return sb.toString();
-    }
-  }
+		public static String valuesString() {
+			StringBuilder sb = new StringBuilder();
+			for (Policy v : values()) {
+				sb.append(v.toString()).append(",");
+			}
+			sb.deleteCharAt(sb.length() - 1);
+			return sb.toString();
+		}
+	}
 
 	@Override
 	public boolean equals(Object b) {

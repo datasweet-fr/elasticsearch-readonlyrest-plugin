@@ -30,6 +30,7 @@ public class Group {
 	public static final String ADMIN = "Admin";
 	public static final String EDITOR = "Editor";
 	public static final String VIEWER = "Viewer";
+	public static final String KIBANA = "Kibana";
 	
 	public Group(Settings s) {
 		if (s != null) {
@@ -55,7 +56,8 @@ public class Group {
 	public enum TYPE {
 		VIEWER,
 		EDITOR,
-		ADMIN;
+		ADMIN,
+		KIBANA;
 		
 		public String valuesString() {
             StringBuilder sb = new StringBuilder();
@@ -101,6 +103,7 @@ public class Group {
 			if (indices.indexOf(item) < indices.size() - 1)
 				sb.append(",");
 		});
+		sb.append(", ");
 		sb.append("FTR:");
 		filters.forEach(item -> {
 			sb.append(item);

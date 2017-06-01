@@ -1,0 +1,188 @@
+# ======================== Elasticsearch Configuration =========================
+#
+# NOTE: Elasticsearch comes with reasonable defaults for most settings.
+#       Before you set out to tweak and tune the configuration, make sure you
+#       understand what are you trying to accomplish and the consequences.
+#
+# The primary way of configuring a node is via this file. This template lists
+# the most important settings you may want to configure for a production cluster.
+#
+# Please consult the documentation for further information on configuration options:
+# https://www.elastic.co/guide/en/elasticsearch/reference/index.html
+#
+# ---------------------------------- Cluster -----------------------------------
+#
+# Use a descriptive name for your cluster:
+#
+#cluster.name: my-application
+#
+# ------------------------------------ Node ------------------------------------
+#
+# Use a descriptive name for the node:
+#
+#node.name: node-1
+#
+# Add custom attributes to the node:
+#
+#node.attr.rack: r1
+#
+# ----------------------------------- Paths ------------------------------------
+#
+# Path to directory where to store the data (separate multiple locations by comma):
+#
+#path.data: /path/to/data
+#
+# Path to log files:
+#
+#path.logs: /path/to/logs
+#
+# ----------------------------------- Memory -----------------------------------
+#
+# Lock the memory on startup:
+#
+#bootstrap.memory_lock: true
+#
+# Make sure that the heap size is set to about half the memory available
+# on the system and that the owner of the process is allowed to use this
+# limit.
+#
+# Elasticsearch performs poorly when the system is swapping the memory.
+#
+# ---------------------------------- Network -----------------------------------
+#
+# Set the bind address to a specific IP (IPv4 or IPv6):
+#
+#network.host: 192.168.0.1
+#
+# Set a custom port for HTTP:
+#
+#http.port: 9200
+#
+# For more information, consult the network module documentation.
+#
+# --------------------------------- Discovery ----------------------------------
+#
+# Pass an initial list of hosts to perform discovery when new node is started:
+# The default list of hosts is ["127.0.0.1", "[::1]"]
+#
+#discovery.zen.ping.unicast.hosts: ["host1", "host2"]
+#
+# Prevent the "split brain" by configuring the majority of nodes (total number of master-eligible nodes / 2 + 1):
+#
+#discovery.zen.minimum_master_nodes: 3
+#
+# For more information, consult the zen discovery module documentation.
+#
+# ---------------------------------- Gateway -----------------------------------
+#
+# Block initial recovery after a full cluster restart until N nodes are started:
+#
+#gateway.recover_after_nodes: 3
+#
+# For more information, consult the gateway module documentation.
+#
+# ---------------------------------- Various -----------------------------------
+#
+# Require explicit names when deleting indices:
+#
+#action.destructive_requires_name: true
+
+readonlyrest:
+    enable: true
+    response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
+    
+    cookieSecret: 3eeadfea0896c1a51b41d09aa1eab3d6c24d2154
+    cookieName: datasweet-oauth
+    tokenClientId: demo
+    tokenSecret: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkBpwYFlAqMcQhdbSOkkOHu3cU39EioKzWdmmkD8HZS0vfuiqij/PgqMJvF49EXwiclCLgGmf71pvZxazEHp2sqQmkUYeF9xAUPvRKurNE2krd69g+nGiOCvoNMZ10APeO3FU36EOtn2cxoYXUs/qkNBQZf1YZaI0BfWqjhwI9ndFwbx2D8o4YliGfJdagDJhueJ4X3L++pqfk7f8UYXehmE9T+2ymJPbSkx7Lw9YQFIoRYdWzAfFJebk1v0FUE1mmfTSDEye47UvYxec4StYzo1f1K3SgXwUTl1EuhClH1eX+XAuQYHWczR9sXH3kGAvKFsJ/azVBh0N1M1hs+N97wIDAQAB
+    
+    template_rules:
+        Viewer:
+            - name: Access allowed on PUT for specific requests for Viewer
+              type: allow
+              indices: [".kibana"]
+              methods: [PUT]
+              auth_oauth: true
+              actions: ["indices:data/read/*", "indices:admin/mappings/fields/*", "indices:admin/mapping/put*"]
+
+            - name: Access allowed on GET on every index for Viewer
+              type: allow
+              indices: [".kibana"]
+              methods: [GET]
+              kibana_access: ro
+              auth_oauth: true
+              actions: ["indices:data/read/*", "indices:admin/mappings/fields/*"]
+      
+            - name: Access allowed on POST for specific requests for Viewer
+              type: allow
+              indices: [".kibana"]
+              methods: [POST]
+              auth_oauth: true
+              actions: ["indices:data/read/field_stats", "indices:data/read/msearch", "indices:data/read/search", "indices:admin/refresh*", "indices:data/read/mget*"]
+            
+            - name: Forbid access to monitor and administration functions to Viewer
+              type: forbid
+              indices: ["*"]
+              auth_oauth: true
+              actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:monitor/*", "internal:indices/*"]
+                
+            - name: Forbid access on POST, DELETE for specific requests for Viewer
+              type: forbid
+              indices: ["*"]
+              auth_oauth: true
+              methods: [POST, DELETE]
+              actions: ["indices:data/write/*"]
+
+        Editor:
+            - name: Access allowed on GET, PUT, POST on every index for Editor
+              type: allow
+              indices: [".kibana"]
+              methods: [GET, POST, PUT]
+              kibana_access: rw
+              auth_oauth: true
+              actions: ["indices:data/*", "indices:admin/mappings/fields/*", "indices:admin/refresh"]
+            
+            - name: Access allow on DELETE on specific request on .kibana for Editor
+              type: allow
+              indices: [".kibana"]
+              methods: [DELETE]
+              auth_oauth: true
+              actions: ["indices:data/write/delete"]
+              
+            - name: Forbid access to monitor and administration functions to Editor 
+              type: forbid
+              indices: ["*"]
+              auth_oauth: true
+              actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:monitor/*", "internal:indices/*"]
+
+        
+        Admin:
+            - name: Access allowed on everything for Admin
+              type: allow
+              indices: ["*"]
+              auth_oauth: true
+              actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:data/*", "indices:monitor/*", "internal:indices/*"]
+
+        Kibana:
+            - name: TEST KIBANA
+              type: allow
+              kibana_access: rw
+              auth_key: USR_KIBANA:USR>>>PWD
+              verbosity: error
+       
+    rules:
+    - group: viewer_ecom
+      type: Viewer
+      indices: ["ecom_*"]
+    
+    - group: viewer_agence
+      type: Viewer
+      indices: ["logstash-*"]
+      filters: "geo.dest:US"
+      
+    - group: Admin
+      type: Admin
+      indices: ["*"]
+      
+    - group: Kibana
+      type: Kibana

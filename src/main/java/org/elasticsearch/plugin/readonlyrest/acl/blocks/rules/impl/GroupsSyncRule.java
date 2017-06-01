@@ -44,41 +44,15 @@ public class GroupsSyncRule extends SyncRule {
 
   //private final List<User> users;
   private final List<String> groups;
-  private  boolean hasReplacements = false;
   private String kibanaGroup = "Kibana";
-  private String adminGroup = "Admin";
   
   public GroupsSyncRule(Settings s, List<User> userList, Group grp) throws RuleNotConfiguredException {
     super();
 
-    //users = userList;
-    String[] pGroups = s.getAsArray(this.getKey());
-
-    if (pGroups != null && pGroups.length > 0) {
-		List<String> grps = new ArrayList<>();
-		grps.addAll(Arrays.asList(pGroups));
-		List<String> groups = Arrays.asList(pGroups);
-		if (groups.contains(kibanaGroup) || groups.contains(adminGroup))
-			this.groups = groups;
-		else {
-			List<String> tmp = new ArrayList<>();
-			if (grp != null) {
-				TYPE type = grp.getType();
-				grps.forEach(item -> {
-					if (item.toLowerCase().equals(type.toString().toLowerCase()))
-						tmp.add(grp.getGroup());
-					//TODO:  ??? not sure
-					if(item != null && item.contains("@")){
-						hasReplacements = true;
-					}
-				});
-			}
-			grps.addAll(tmp);
-			this.groups = grps;
-		}
-	} else {
-		throw new RuleNotConfiguredException();
-	}
+    if (grp.getGroup() == null || grp.getGroup().isEmpty())
+    	throw new RuleNotConfiguredException();
+    this.groups = new ArrayList<>();
+    this.groups.add(grp.getGroup());
   }
 
   public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList, Group grp) {
@@ -101,9 +75,7 @@ public class GroupsSyncRule extends SyncRule {
 		// Using a set to remove all duplicates
 		Set<String> commonGroupsSet = new HashSet<>(commonGroups);
 		commonGroupsSet.retainAll(token.getRoles());
-		if (!commonGroupsSet.isEmpty() && token.getRoles().contains(adminGroup))
-			return MATCH;
-		else if (commonGroupsSet.size() == token.getRoles().size())
+		if (!commonGroupsSet.isEmpty())
 			return MATCH;
 		return NO_MATCH;
   }
