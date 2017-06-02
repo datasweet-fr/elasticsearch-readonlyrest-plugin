@@ -301,12 +301,12 @@ public class OAuthToken {
 			this.setExp(new Date(obj.getLong("exp") * 1000L));
 			this.setAud(obj.getString("aud"));
 			this.setAzp(obj.getString("azp"));
-			JSONArray rolesJson = new JSONArray();
-			rolesJson = obj.getJSONObject("resource_access").getJSONObject(clientId).getJSONArray("roles");
+			JSONArray rolesJson = obj.getJSONObject("resource_access").getJSONObject(clientId).getJSONArray("roles");
 			ArrayList<String> rolesList = new ArrayList<String>();
-			rolesJson.forEach(role -> {
-				rolesList.add((String) role);
-			});
+			if (rolesJson != null) 
+				rolesJson.forEach(role -> {
+					rolesList.add((String) role);
+				});
 			this.setRoles(rolesList);
 			this.setJti(obj.getString("jti"));
 			this.setNbf(obj.getInt("nbf"));
