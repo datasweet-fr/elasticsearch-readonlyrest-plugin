@@ -278,10 +278,10 @@ public class OAuthToken {
 	private void parseHeader(String header) throws JSONException, UnsupportedEncodingException {
 		logger.debug("BEGIN parsing OAuth token header");
 
+		if (header == null)
+			return;
 		byte[] decodedBytes = Base64.getDecoder().decode(header);
 		JSONObject obj = new JSONObject(new String(decodedBytes, "UTF-8"));
-		if (obj == null)
-			return;
 		this.setAlg(obj.getString("alg"));
 
 		logger.debug("END parsing OAuth token payload");
@@ -291,12 +291,12 @@ public class OAuthToken {
 		logger.debug("BEGIN parsing OAuth token payload");
 		JSONObject obj = null;
 
+		if (payload == null)
+			return;
 		byte[] decodedBytes = Base64.getDecoder().decode(payload);
 		obj = new JSONObject(new String(decodedBytes, "UTF-8"));
 		// *1000L because unix timestamp are in second
 		// and java Date timestamps are in ms
-		if (obj == null)
-			return;
 		try {
 			this.setExp(new Date(obj.getLong("exp") * 1000L));
 			this.setAud(obj.getString("aud"));

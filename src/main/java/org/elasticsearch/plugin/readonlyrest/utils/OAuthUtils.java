@@ -25,7 +25,6 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Map;
 
 import org.apache.commons.codec.binary.Base64;
-import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 
 import com.google.common.base.Strings;
