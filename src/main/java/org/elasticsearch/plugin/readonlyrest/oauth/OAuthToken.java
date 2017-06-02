@@ -310,7 +310,7 @@ public class OAuthToken {
 			this.setRoles(rolesList);
 			this.setJti(obj.getString("jti"));
 			this.setNbf(obj.getInt("nbf"));
-			this.setIat(new Date(obj.getLong("nbf") * 1000L));
+			this.setIat(new Date(obj.getLong("iat") * 1000L));
 			this.setIss(obj.getString("iss"));
 			this.setSub(obj.getString("sub"));
 			this.setTyp(obj.getString("typ"));
