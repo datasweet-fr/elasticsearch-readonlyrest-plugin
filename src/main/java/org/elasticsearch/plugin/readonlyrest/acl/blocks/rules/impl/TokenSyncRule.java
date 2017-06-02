@@ -64,6 +64,7 @@ public class TokenSyncRule extends SyncRule {
 	public RuleExitResult match(RequestContext rc) {
 		OAuthToken token = OAuthUtils.getOAuthToken(rc.getHeaders(), this.cookieName, this.cookieSecret, this.tokenClientId, this.tokenSecret);
 		rc.setToken(token);
+		token = rc.getToken();
 		if (token == null) {
 			rc.setLoggedInUser(new LoggedUser("Kibana"));
 			return NO_MATCH;

@@ -38,7 +38,7 @@ public class BlockTest extends TestCase {
                                 .putArray("indices", "allowed-index")
                                 .build();
     Block block = new Block(settings, Lists.newArrayList(), LdapConfigs.empty(), Lists.newArrayList(),
-        Lists.newArrayList(), Lists.newArrayList(), null, null);
+        Lists.newArrayList(), Lists.newArrayList(), null, null, null);
 
     Set<AsyncRule> rules = block.getRules();
     Iterator<AsyncRule> it = rules.iterator();

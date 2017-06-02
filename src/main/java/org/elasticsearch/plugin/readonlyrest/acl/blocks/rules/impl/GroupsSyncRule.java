@@ -46,10 +46,10 @@ public class GroupsSyncRule extends SyncRule {
   private final List<String> groups;
   private String kibanaGroup = "Kibana";
   
-  public GroupsSyncRule(Settings s, List<User> userList, Group grp) throws RuleNotConfiguredException {
+  public GroupsSyncRule(List<User> userList, Group grp) throws RuleNotConfiguredException {
     super();
 
-    if (grp.getGroup() == null || grp.getGroup().isEmpty())
+    if (grp == null || grp.getGroup() == null || grp.getGroup().isEmpty())
     	throw new RuleNotConfiguredException();
     this.groups = new ArrayList<>();
     this.groups.add(grp.getGroup());
@@ -57,7 +57,7 @@ public class GroupsSyncRule extends SyncRule {
 
   public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList, Group grp) {
     try {
-      return Optional.of(new GroupsSyncRule(s, userList, grp));
+      return Optional.of(new GroupsSyncRule(userList, grp));
     } catch (RuleNotConfiguredException ignored) {
       return Optional.empty();
     }
@@ -71,7 +71,6 @@ public class GroupsSyncRule extends SyncRule {
 			return MATCH;
 		if (commonGroups == null || commonGroups.isEmpty() || token == null || token.getRoles() == null)
 			return NO_MATCH;
-		//commonGroups.retainAll(token.getRoles());
 		// Using a set to remove all duplicates
 		Set<String> commonGroupsSet = new HashSet<>(commonGroups);
 		commonGroupsSet.retainAll(token.getRoles());

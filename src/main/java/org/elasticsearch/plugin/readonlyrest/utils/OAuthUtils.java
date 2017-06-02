@@ -32,7 +32,13 @@ import com.google.common.base.Strings;
 
 public class OAuthUtils {
 	
-    // Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==
+	/**
+	 * Extract token from Bearer Authorization header
+	 * @param authorizationHeader
+	 * 		the header
+	 * @return
+	 * 		the token extracted
+	 */
     public static String extractTokenFromHeader(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.trim().length() == 0 || !authorizationHeader.contains("Bearer "))
             return null;
@@ -43,6 +49,15 @@ public class OAuthUtils {
         return interestingPart;
     }
     
+    /**
+     * Extract token from Cookie
+     * @param cookieHeader
+     * 		the cookie
+     * @param cookieName
+     * 		the name of the cookie
+     * @return
+     * 		the token extracted
+     */
     public static String extractTokenFromCookie(String cookieHeader, String cookieName) {
         String token = cookieHeader;
         if (token == null || token.trim().length() == 0 || !token.contains(cookieName))
@@ -53,6 +68,8 @@ public class OAuthUtils {
     }
 
     public static OAuthToken getOAuthToken(Map<String, String> headers, String cookieName, String cookieSecret, String tokenClientId, String tokenSecret) {
+    	if (headers == null)
+    		return null;
         String tokenCookie = extractTokenFromCookie(headers.get("Cookie"), cookieName);
         String tokenHeader = extractTokenFromHeader(headers.get("Authorization"));
         OAuthToken oAuthToken = new OAuthToken();
@@ -89,6 +106,7 @@ public class OAuthUtils {
     		    s.initVerify(generatePublic);
     		    s.update(contentBytes);
     		    s.verify(signatureBytes);
+    		    return true;
     	    } catch (Exception e) {
     	    	e.printStackTrace();
     	    	return false;
@@ -97,7 +115,7 @@ public class OAuthUtils {
     		// TODO
     	} // and so on
     		
-    	return true;
+    	return false;
     }
 }
 
