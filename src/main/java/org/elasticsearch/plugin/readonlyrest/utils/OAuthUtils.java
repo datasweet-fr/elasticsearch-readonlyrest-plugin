@@ -88,6 +88,8 @@ public class OAuthUtils {
     }
     
     public static boolean verifyTokenIntegrity(OAuthToken token, String tokenPublicKey) {
+    	if (token == null || tokenPublicKey == null)
+    		return false;
     	String header = token.getHeader();
     	String payload = token.getPayload();
     	String signature = token.getSignature();

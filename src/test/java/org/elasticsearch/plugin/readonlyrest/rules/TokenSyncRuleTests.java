@@ -111,7 +111,7 @@ public class TokenSyncRuleTests extends TestCase {
 	}
 	
 	@Test
-	public void testThrowException() {
+	public void testThrowRuleNotConfiguredException() {
 		RequestContext rc = Mockito.mock(RequestContext.class);
 		try {
 			match("", rc);

@@ -241,6 +241,10 @@ public class OAuthToken {
 		String token;
 		try {
 			token = Jiron.unseal(jwt, secret, Jiron.DEFAULT_ENCRYPTION_OPTIONS, Jiron.DEFAULT_INTEGRITY_OPTIONS);
+			if (token != null) {
+				JSONObject obj = new JSONObject(token);
+				token = obj.getString("token");
+			}
 		} catch (JironException | JironIntegrityException e) {
 			logger.error("Error while deciphering token " + e.getMessage());
 			return null;
@@ -248,18 +252,18 @@ public class OAuthToken {
 		return parseDecryptedJWT(token, clientId);
 	}
 
-	public OAuthToken parseDecryptedJWT(String decryptedCookie, String clientId) {
-		String[] cookie = decryptedCookie.split("\\:");
-		String token = cookie[1];
-		token = token.substring(1, token.length());
+	public OAuthToken parseDecryptedJWT(String decryptedToken, String clientId) {
+//		String[] cookie = decryptedToken.split("\\.");
+//		String token = cookie[1];
+		String token = decryptedToken;
 		String[] jwtParts = token.split("\\.");
 		if (jwtParts.length == 3) {
 			String header = jwtParts[0];
 			this.header = header;
 			String payload = jwtParts[1];
 			this.payload = payload;
-			String RSASignature = jwtParts[2];	
-			this.signature = RSASignature.substring(0, RSASignature.indexOf("\""));
+			String RSASignature = jwtParts[2];
+			this.signature = RSASignature;
 			try {
 				parseHeader(header);
 				parsePayload(payload, clientId);
