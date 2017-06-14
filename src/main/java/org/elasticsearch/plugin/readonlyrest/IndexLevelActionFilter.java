@@ -96,6 +96,8 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
       return;
     }
 
+    if (threadPool.getThreadContext().getTransient(ThreadConstants.pluginEnabled) == null)
+		threadPool.getThreadContext().putTransient(ThreadConstants.pluginEnabled, true);
     RestChannel channel = ThreadRepo.channel.get();
     boolean chanNull = channel == null;
 

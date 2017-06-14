@@ -60,7 +60,7 @@ public class Group {
 	}
 
 	public enum TYPE {
-		VIEWER, EDITOR, ADMIN, KIBANA;
+		VIEWER, EDITOR, ADMIN, KIBANA, INDEXER;
 
 		public String valuesString() {
 			StringBuilder sb = new StringBuilder();

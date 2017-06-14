@@ -43,6 +43,7 @@ public class GroupsSyncRule extends SyncRule {
   //private final List<User> users;
   private final List<String> groups;
   private String kibanaGroup = "Kibana";
+  private String indexerGroup = "Indexer";
   
   public GroupsSyncRule(List<User> userList, Group grp) throws RuleNotConfiguredException {
     super();
@@ -65,7 +66,7 @@ public class GroupsSyncRule extends SyncRule {
   public RuleExitResult match(RequestContext rc) {
     	OAuthToken token = rc.getToken();
     	List<String> commonGroups = new ArrayList<>(this.groups);
-		if (commonGroups.contains(kibanaGroup) && token == null)
+		if ((commonGroups.contains(kibanaGroup) || commonGroups.contains(indexerGroup)) && token == null)
 			return MATCH;
 		if (commonGroups == null || commonGroups.isEmpty() || token == null || token.getRoles() == null)
 			return NO_MATCH;
