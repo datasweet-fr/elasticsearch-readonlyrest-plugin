@@ -90,6 +90,8 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
       ActionFilterChain<Request, Response> chain) {
     // Skip if disabled
     if (!conf.enabled) {
+    	if (threadPool.getThreadContext().getTransient(ThreadConstants.pluginEnabled) == null)
+    		threadPool.getThreadContext().putTransient(ThreadConstants.pluginEnabled, false);
       chain.proceed(task, action, request, listener);
       return;
     }
