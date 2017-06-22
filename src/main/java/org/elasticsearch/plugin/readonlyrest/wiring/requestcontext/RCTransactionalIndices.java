@@ -28,6 +28,7 @@ import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkShardRequest;
+import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.get.MultiGetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.MultiSearchRequest;
@@ -131,6 +132,10 @@ public class RCTransactionalIndices {
         else if (ar instanceof IndexRequest) {
           IndexRequest ir = (IndexRequest) ar;
           indices = ir.indices();
+        }
+        else if (ar instanceof DeleteRequest) {
+        	DeleteRequest dr = (DeleteRequest) ar;
+        	indices = dr.indices();
         }
         else if (ar instanceof CompositeIndicesRequest) {
           logger.error(

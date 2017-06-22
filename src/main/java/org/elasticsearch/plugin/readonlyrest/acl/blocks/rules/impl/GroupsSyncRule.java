@@ -17,17 +17,20 @@
 
 package org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.User;
+import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * A GroupsSyncRule checks if a request containing Basic Authentication credentials
@@ -37,32 +40,23 @@ import java.util.Optional;
  */
 public class GroupsSyncRule extends SyncRule {
 
-  private final List<User> users;
+  //private final List<User> users;
   private final List<String> groups;
-  private  boolean hasReplacements = false;
-
-  public GroupsSyncRule(Settings s, List<User> userList) throws RuleNotConfiguredException {
+  private String kibanaGroup = "Kibana";
+  private String indexerGroup = "Indexer";
+  
+  public GroupsSyncRule(List<User> userList, Group grp) throws RuleNotConfiguredException {
     super();
 
-    users = userList;
-    String[] pGroups = s.getAsArray(this.getKey());
-    if (pGroups != null && pGroups.length > 0) {
-      for(int i = 0; i < pGroups.length; i++){
-        if(pGroups[i] != null && pGroups[i].contains("@")){
-          hasReplacements = true;
-          break;
-        }
-      }
-      this.groups = Arrays.asList(pGroups);
-    }
-    else {
-      throw new RuleNotConfiguredException();
-    }
+    if (grp == null || grp.getGroup() == null || grp.getGroup().isEmpty())
+    	throw new RuleNotConfiguredException();
+    this.groups = new ArrayList<>();
+    this.groups.add(grp.getGroup());
   }
 
-  public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList) {
+  public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList, Group grp) {
     try {
-      return Optional.of(new GroupsSyncRule(s, userList));
+      return Optional.of(new GroupsSyncRule(userList, grp));
     } catch (RuleNotConfiguredException ignored) {
       return Optional.empty();
     }
@@ -70,29 +64,18 @@ public class GroupsSyncRule extends SyncRule {
 
   @Override
   public RuleExitResult match(RequestContext rc) {
-    for (User user : this.users) {
-      if (user.getAuthKeyRule().match(rc).isMatch()) {
-        List<String> commonGroups = new ArrayList<>(user.getGroups());
-
-        List<String> groupsInThisRule;
-        if(hasReplacements){
-          groupsInThisRule = new ArrayList<>(this.groups.size());
-          for(String g : this.groups){
-            // won't add if applyVariables doesn't find all replacements
-            rc.applyVariables(g).map(groupsInThisRule::add);
-          }
-        }
-        else{
-          groupsInThisRule = this.groups;
-        }
-
-        commonGroups.retainAll(groupsInThisRule);
-        if (!commonGroups.isEmpty()) {
-          return MATCH;
-        }
-      }
-    }
-    return NO_MATCH;
+    	OAuthToken token = rc.getToken();
+    	List<String> commonGroups = new ArrayList<>(this.groups);
+		if ((commonGroups.contains(kibanaGroup) || commonGroups.contains(indexerGroup)) && token == null)
+			return MATCH;
+		if (commonGroups == null || commonGroups.isEmpty() || token == null || token.getRoles() == null)
+			return NO_MATCH;
+		// Using a set to remove all duplicates
+		Set<String> commonGroupsSet = new HashSet<>(commonGroups);
+		commonGroupsSet.retainAll(token.getRoles());
+		if (!commonGroupsSet.isEmpty())
+			return MATCH;
+		return NO_MATCH;
   }
 
 }

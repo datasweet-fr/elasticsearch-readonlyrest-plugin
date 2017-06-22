@@ -56,6 +56,7 @@ public class ConfigurationHelper {
 
   private static ConfigurationHelper currentInstance;
   private static boolean requirePassword;
+  private static boolean isOAuthEnabled;
   private final Client client;
 
   public boolean enabled;
@@ -70,6 +71,11 @@ public class ConfigurationHelper {
   public String sslKeyAlias;
   public String sslCertChainPem;
   public String sslPrivKeyPem;
+  public boolean oauthEnabled;
+  public String cookieName;
+  public String cookieSecret;
+  public String tokenSecret;
+  public String tokenClientId;
   public ACL acl;
 
   @Inject
@@ -121,9 +127,10 @@ public class ConfigurationHelper {
 
   public static List<Setting<?>> allowedSettings() {
     String prefix = "readonlyrest.";
-    String rule_prefix = prefix + "access_control_rules.";
+    String rule_prefix = prefix + "template_rules.";
     String users_prefix = prefix + "users.";
     String ldaps_prefix = prefix + "ldaps.";
+    String groups_prefix = prefix + "rules.";
     String proxy_auth_configs_prefix = prefix + "proxy_auth_configs.";
     String user_groups_providers_prefix = prefix + "user_groups_providers.";
     String external_authentication_service_configs_prefix = prefix + "external_authentication_service_configs.";
@@ -132,7 +139,11 @@ public class ConfigurationHelper {
         bool(prefix + "enable"),
         str(prefix + "response_if_req_forbidden"),
         bool(prefix + "searchlog"),
-
+        bool(prefix + "oauth_enabled"),
+        str(prefix + "cookieSecret"),
+        str(prefix + "cookieName"),
+        str(prefix + "tokenClientId"),
+        str(prefix + "tokenSecret"),
         // SSL
         bool(prefix + "ssl.enable"),
         str(prefix + "ssl.keystore_file"),
@@ -145,6 +156,7 @@ public class ConfigurationHelper {
         grp(rule_prefix),
         grp(users_prefix),
         grp(ldaps_prefix),
+        grp(groups_prefix),
         grp(proxy_auth_configs_prefix),
         grp(user_groups_providers_prefix),
         grp(external_authentication_service_configs_prefix)
@@ -176,6 +188,10 @@ public class ConfigurationHelper {
     return requirePassword;
   }
 
+  public static boolean isOAuthEnabled() {
+	return isOAuthEnabled;
+  }
+  
   public void updateSettingsFromIndex(Client client) throws ResourceNotFoundException {
     GetResponse resp = client.prepareGet(".readonlyrest", "settings", "1").get();
     if (!resp.isExists()) {
@@ -193,7 +209,12 @@ public class ConfigurationHelper {
     enabled = s.getAsBoolean("enable", s.getByPrefix("access_control_rules").size() > 0);
 
     forbiddenResponse = s.get("response_if_req_forbidden", "Forbidden").trim();
-
+    oauthEnabled = s.getAsBoolean("oauth_enabled", false);
+    cookieName = s.get("cookieName");
+    cookieSecret = s.get("cookieSecret");
+    tokenClientId = s.get("tokenClientId");
+    tokenSecret = s.get("tokenSecret");
+    isOAuthEnabled = oauthEnabled;
     // -- SSL
     sslEnabled = s.getAsBoolean("ssl.enable", s.getByPrefix("ssl").size() > 1);
     if (sslEnabled) {

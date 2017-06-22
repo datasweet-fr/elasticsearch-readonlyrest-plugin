@@ -17,16 +17,17 @@
 
 package org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl;
 
+import java.util.Optional;
+
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.MatcherWithWildcards;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
-
-import java.util.Optional;
 
 /**
  * Created by sscarduzio on 14/02/2016.
@@ -37,14 +38,14 @@ public class ActionsSyncRule extends SyncRule {
 
   protected MatcherWithWildcards m;
 
-  public ActionsSyncRule(Settings s) throws RuleNotConfiguredException {
+  public ActionsSyncRule(Settings s, Group grp) throws RuleNotConfiguredException {
     super();
-    m = MatcherWithWildcards.fromSettings(s, getKey());
+    m = MatcherWithWildcards.fromSettings(s, getKey(), grp);
   }
 
-  public static Optional<ActionsSyncRule> fromSettings(Settings s) {
+  public static Optional<ActionsSyncRule> fromSettings(Settings s, Group grp) {
     try {
-      return Optional.of(new ActionsSyncRule(s));
+      return Optional.of(new ActionsSyncRule(s, grp));
     } catch (RuleNotConfiguredException ignored) {
       return Optional.empty();
     }
