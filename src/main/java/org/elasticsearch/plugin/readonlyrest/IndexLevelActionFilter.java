@@ -17,6 +17,9 @@
 
 package org.elasticsearch.plugin.readonlyrest;
 
+import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
+import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
+
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
@@ -34,17 +37,15 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
+import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
+import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 import org.elasticsearch.plugin.readonlyrest.wiring.ThreadRepo;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
-
-import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
-import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 
 /**
  * Created by sscarduzio on 19/12/2015.
@@ -73,7 +74,7 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
       return;
     }
 
-    logger.info("Readonly REST plugin is enabled. Yay, ponies!");
+    logger.info("Readonly REST plugin is enabled!");
   }
 
   @Override
@@ -89,10 +90,14 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
       ActionFilterChain<Request, Response> chain) {
     // Skip if disabled
     if (!conf.enabled) {
+    	if (threadPool.getThreadContext().getTransient(ThreadConstants.pluginEnabled) == null)
+    		threadPool.getThreadContext().putTransient(ThreadConstants.pluginEnabled, false);
       chain.proceed(task, action, request, listener);
       return;
     }
 
+    if (threadPool.getThreadContext().getTransient(ThreadConstants.pluginEnabled) == null)
+		threadPool.getThreadContext().putTransient(ThreadConstants.pluginEnabled, true);
     RestChannel channel = ThreadRepo.channel.get();
     boolean chanNull = channel == null;
 
@@ -123,9 +128,8 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
     RequestContext rc = new RequestContext(channel, req, action, request, clusterService, indexResolver, threadPool);
     conf.acl.check(rc)
-
       .exceptionally(throwable -> {
-        logger.info("forbidden request: " + rc + " Reason: " + throwable.getMessage());
+        logger.warn("forbidden request: " + rc + " Reason: " + throwable.getMessage());
         if (throwable.getCause() instanceof ResourceNotFoundException) {
           logger.warn("Resource not found! ID: " + rc.getId() + "  " + throwable.getCause().getMessage());
           sendNotFound((ResourceNotFoundException) throwable.getCause(), channel);
@@ -138,7 +142,11 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
       .thenApply(result -> {
         assert result != null;
-
+        OAuthToken token = rc.getToken();
+        if (token != null) {
+        	if (threadPool.getThreadContext().getTransient(ThreadConstants.userGroup) == null)
+        		threadPool.getThreadContext().putTransient(ThreadConstants.userGroup, token.getRoles());
+        }
         if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
           try {
             @SuppressWarnings("unchecked")
@@ -154,7 +162,7 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
           return null;
         }
 
-        logger.info("forbidden request: " + rc + " Reason: " + result.getBlock() + " (" + result.getBlock() + ")");
+        logger.warn("forbidden request: " + rc + " Reason: " + result.getBlock() + " (" + result.getBlock() + ")");
         sendNotAuthResponse(channel);
         return null;
       });
@@ -164,14 +172,7 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
     String reason = conf.forbiddenResponse;
 
     BytesRestResponse resp;
-    if (ConfigurationHelper.doesRequirePassword()) {
-      resp = new BytesRestResponse(RestStatus.UNAUTHORIZED, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
-      logger.debug("Sending login prompt header...");
-      resp.addHeader("WWW-Authenticate", "Basic");
-    }
-    else {
-      resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
-    }
+    resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
 
     channel.sendResponse(resp);
   }

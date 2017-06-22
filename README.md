@@ -33,7 +33,7 @@ Append either of these snippets to `conf/elasticsearch.yml`
 ```yml
 readonlyrest:
     enable: true
-    access_control_rules: 
+    template_rules: 
     
     - name: "Accept all requests from localhost"
       type: allow
@@ -66,7 +66,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Sorry, your request is forbidden.
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept all requests from localhost
       type: allow
@@ -91,7 +91,7 @@ readonlyrest:
 
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
 
-    access_control_rules:
+    template_rules:
 
     - name: "::LOGSTASH::"
       # auth_key is good for testing, but replace it with `auth_key_sha1`!
@@ -141,7 +141,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept requests from users in group team1 on index1
       type: allow
@@ -182,7 +182,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept requests from users in group team1 on index1
       type: allow
@@ -230,7 +230,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: Accept requests from users in group team1 on index1
       type: allow
@@ -293,7 +293,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
     
     - name: "::Tweets::"
       type: allow
@@ -337,7 +337,7 @@ readonlyrest:
     enable: true
     response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
     
-    access_control_rules:
+    template_rules:
 
     - name: "::Tweets::"
       type: allow
@@ -388,6 +388,28 @@ To define user groups provider you should specify:
 - `response_groups_json_path` - response can be unrestricted, but you have to specify JSON Path for groups name list (see example in tests)
 
 As usual, the cache behaviour can be defined at service level or/and at rule level.
+
+### USE CASE: OAuth Authentication
+This authentication is based on OAuth. The goal is to authenticate a user with an access token.
+```
+readonlyrest:
+    enable: true
+    response_if_req_forbidden: Forbidden by ReadonlyREST ES plugin
+    oauth_enabled: true
+    cookieSecret: secret
+    cookieName: myCookie
+    tokenClientId: demo
+    tokenSecret: publickey
+```
+
+In the example above, the user is authenticated with a JWT token (https://jwt.io/) set in a cookie called 'myCookie'
+Only RSA-256 (for now) encryption is supported as JWT signature.
+- `cookieSecret` is the secret used to encrypt the cookie (with Jiron)
+- `cookieName` is the name of the Cookie
+- `tokenClientId` is the name used to get the groups of the user in the token, under the claim "resource_access"
+- `tokenSecret` the public key (in case of RSA-256) used to sign and verify the token
+
+In order to make this use case work, you'll need to install http://www.oracle.com/technetwork/java/javase/downloads/jce8-download-2133166.html in your JAVA_HOME
 
 ### 3. Restart Elasticsearch
 

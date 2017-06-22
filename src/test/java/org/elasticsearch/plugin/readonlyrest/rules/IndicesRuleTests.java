@@ -53,7 +53,7 @@ public class IndicesRuleTests extends TestCase {
 
     SyncRule r = new IndicesSyncRule(Settings.builder()
                                              .putArray("indices", configured)
-                                             .build());
+                                             .build(), null);
 
     RuleExitResult res = r.match(rc);
     rc.commit();

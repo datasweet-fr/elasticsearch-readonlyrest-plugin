@@ -17,6 +17,18 @@
 
 package org.elasticsearch.plugin.readonlyrest.wiring;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
+
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionRequest;
@@ -39,6 +51,9 @@ import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.http.HttpServerTransport;
+import org.elasticsearch.index.IndexModule;
+import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
 import org.elasticsearch.plugin.readonlyrest.IndexLevelActionFilter;
@@ -46,6 +61,8 @@ import org.elasticsearch.plugin.readonlyrest.SSLTransportNetty4;
 import org.elasticsearch.plugin.readonlyrest.rradmin.RRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.TransportRRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.rest.RestRRAdminAction;
+import org.elasticsearch.plugin.readonlyrest.security.EmptyIndexSearchWrapper;
+import org.elasticsearch.plugin.readonlyrest.utils.ClassHelper;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.IngestPlugin;
 import org.elasticsearch.plugins.NetworkPlugin;
@@ -59,22 +76,30 @@ import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.watcher.ResourceWatcherService;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
-
 public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPlugin, IngestPlugin, NetworkPlugin {
   private final Settings settings;
   private final Logger logger = Loggers.getLogger(this.getClass());
-
+  private boolean documentFilteringEnabled = false;
+  private Constructor<?> documentFilteringConstructor;
+  private static final String docFilteringClass = "org.elasticsearch.plugin.readonlyrest.security.CustomIndexSearcherWrapper";
+  
   public ReadonlyRestPlugin(Settings s) {
     this.settings = s;
+    if (ClassHelper.isLoadable(docFilteringClass)) {
+    	try {
+    		documentFilteringConstructor = ClassHelper.loadClass(docFilteringClass).getConstructor(IndexService.class, Settings.class);
+    	} catch (NoSuchMethodException | SecurityException e) {
+    		logger.info("Document filtering plugin not available, reason: " + e.getLocalizedMessage());
+			documentFilteringEnabled = false;
+			documentFilteringConstructor = null;
+			return;
+    	}
+    	documentFilteringEnabled = documentFilteringConstructor != null;
+    	logger.info("Document filtering plugin available");
+    }
+    else {
+    	logger.info("Document filtering is not available");
+    }
   }
 
   @Override
@@ -162,6 +187,25 @@ public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPl
         restHandler.handleRequest(request, channel, client);
       }
     };
+  }
+  
+  @Override
+  public void onIndexModule(IndexModule module) {
+	  if (documentFilteringEnabled) {
+		  module.setSearcherWrapper(indexService -> {
+			  try {
+				  return (IndexSearcherWrapper) this.documentFilteringConstructor.newInstance(indexService, this.settings);
+			  } catch (InstantiationException | IllegalAccessException | IllegalArgumentException
+						| InvocationTargetException e) {
+				  logger.error("Error while trying to set the IndexSearch Wrapper");
+				  logger.error("Using empty one instead");
+				  logger.error(e.getLocalizedMessage());
+			  }
+			  return new EmptyIndexSearchWrapper(indexService, this.settings);
+		  });
+	  } else {
+		  module.setSearcherWrapper(indexService -> new EmptyIndexSearchWrapper(indexService, this.settings));
+	  }
   }
 
 }

@@ -17,17 +17,20 @@
 
 package org.elasticsearch.plugin.readonlyrest.acl.blocks.rules;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.set.Sets;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.VariablesManager;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Created by sscarduzio on 02/04/2016.
@@ -72,7 +75,7 @@ public class MatcherWithWildcards {
     }
   }
 
-  public static MatcherWithWildcards fromSettings(Settings s, String key) throws RuleNotConfiguredException {
+  public static MatcherWithWildcards fromSettings(Settings s, String key, Group grp) throws RuleNotConfiguredException {
 
     // Will work fine also with single strings (non array) values.
     String[] a = s.getAsArray(key);
@@ -81,8 +84,13 @@ public class MatcherWithWildcards {
       throw new RuleNotConfiguredException();
     }
 
-
-    return new MatcherWithWildcards(Sets.newHashSet(a));
+    Objects.requireNonNull(a);
+    HashSet<String> set = new HashSet<>();
+    Collections.addAll(set, a);
+    if (grp != null)
+    	Collections.addAll(set, (String[]) grp.getIndices().toArray());
+    return new MatcherWithWildcards(set);
+    //return new MatcherWithWildcards(Sets.newHashSet(a));
   }
 
   /**
