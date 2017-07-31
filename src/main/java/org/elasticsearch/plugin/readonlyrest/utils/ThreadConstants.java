@@ -21,4 +21,5 @@ package org.elasticsearch.plugin.readonlyrest.utils;
 public class ThreadConstants {
 	public static final String userGroup = "_userGroup_";
 	public static final String pluginEnabled = "_enabled_";
+	public static final String capture = "_capture_";
 }

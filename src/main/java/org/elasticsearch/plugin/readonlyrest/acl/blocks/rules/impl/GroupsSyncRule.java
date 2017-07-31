@@ -22,6 +22,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
@@ -72,10 +74,37 @@ public class GroupsSyncRule extends SyncRule {
 			return NO_MATCH;
 		// Using a set to remove all duplicates
 		Set<String> commonGroupsSet = new HashSet<>(commonGroups);
+		for (String role : token.getRoles()) {
+			// \d for digit [0-9]
+			// [0] because for now, there is only one group for one rule
+			String pattern = (String)commonGroupsSet.toArray()[0];
+			// Will replace all the group in the config where there is a * in the name (D*, DR*, C*, ...)
+			// Admin, Editor, Viewer, ... won't be impacted
+//			pattern = pattern.replaceAll("\\*", "(\\\\d+)");
+			pattern = pattern.replaceAll("\\*", "(\\.+)");
+			pattern = pattern.replaceAll("\\?", "(\\.)");
+			//pattern = pattern.replaceAll("\\*", "(\\.+)");
+			Pattern p = Pattern.compile(pattern);
+			Matcher m = p.matcher(role);
+			boolean b = m.matches();
+			if (b) {
+				// Get the capture (for (D*, D01) returns 01) so we
+				// can replace it when we'll use the filters later
+				if (m.groupCount() > 0) {
+					List<String> captureList = new ArrayList<>();
+					for (int i = 1; i <= m.groupCount(); i++) {
+						captureList.add(m.group(i));
+					}
+					token.setCapture(captureList);
+				}
+				return MATCH;
+			}
+		}
 		commonGroupsSet.retainAll(token.getRoles());
-		if (!commonGroupsSet.isEmpty())
-			return MATCH;
+//		if (!commonGroupsSet.isEmpty())
+//			return MATCH;
 		return NO_MATCH;
   }
 
 }
+

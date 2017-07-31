@@ -146,6 +146,8 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
         if (token != null) {
         	if (threadPool.getThreadContext().getTransient(ThreadConstants.userGroup) == null)
         		threadPool.getThreadContext().putTransient(ThreadConstants.userGroup, token.getRoles());
+        	if (threadPool.getThreadContext().getTransient(ThreadConstants.capture) == null)
+        		threadPool.getThreadContext().putTransient(ThreadConstants.capture, token.getCapture());
         }
         if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
           try {
