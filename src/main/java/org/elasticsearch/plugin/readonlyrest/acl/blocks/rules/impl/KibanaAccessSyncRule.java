@@ -66,7 +66,8 @@ public class KibanaAccessSyncRule extends SyncRule {
   public static MatcherWithWildcards CLUSTER = new MatcherWithWildcards(Sets.newHashSet(
       "cluster:monitor/nodes/info",
       "cluster:monitor/main",
-      "cluster:monitor/health"
+      "cluster:monitor/health",
+      "cluster:monitor/state"
   ));
   private final Logger logger = Loggers.getLogger(this.getClass());
   private String kibanaIndex = ".kibana";
