@@ -30,6 +30,10 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.plugin.readonlyrest.acl.ACL;
 
+import java.io.IOException;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
@@ -37,204 +41,207 @@ import java.util.List;
  * ConfigurationHelper
  *
  * @author <a href="mailto:scarduzio@gmail.com">Simone Scarduzio</a>
- * @see <a href="https://github.com/sscarduzio/elasticsearch-readonlyrest-plugin/">Github Project</a>
+ * @see <a href=
+ *      "https://github.com/sscarduzio/elasticsearch-readonlyrest-plugin/">Github
+ *      Project</a>
  */
 
 @Singleton
 public class ConfigurationHelper {
-  public static final String ANSI_RESET = "\u001B[0m";
-  public static final String ANSI_BLACK = "\u001B[30m";
-  public static final String ANSI_RED = "\u001B[31m";
-  public static final String ANSI_GREEN = "\u001B[32m";
-  public static final String ANSI_YELLOW = "\u001B[33m";
-  public static final String ANSI_BLUE = "\u001B[34m";
-  public static final String ANSI_PURPLE = "\u001B[35m";
-  public static final String ANSI_CYAN = "\u001B[36m";
-  public static final String ANSI_WHITE = "\u001B[37m";
+	public static final String ANSI_RESET = "\u001B[0m";
+	public static final String ANSI_BLACK = "\u001B[30m";
+	public static final String ANSI_RED = "\u001B[31m";
+	public static final String ANSI_GREEN = "\u001B[32m";
+	public static final String ANSI_YELLOW = "\u001B[33m";
+	public static final String ANSI_BLUE = "\u001B[34m";
+	public static final String ANSI_PURPLE = "\u001B[35m";
+	public static final String ANSI_CYAN = "\u001B[36m";
+	public static final String ANSI_WHITE = "\u001B[37m";
 
-  private static final Logger logger = Loggers.getLogger(ConfigurationHelper.class);
+	private static final Logger logger = Loggers.getLogger(ConfigurationHelper.class);
 
-  private static ConfigurationHelper currentInstance;
-  private static boolean requirePassword;
-  private static boolean isOAuthEnabled;
-  private final Client client;
+	private static ConfigurationHelper currentInstance;
+	private static boolean requirePassword;
+	private static boolean isOAuthEnabled;
+	private final Client client;
 
-  public boolean enabled;
-  public String verbosity;
-  public String forbiddenResponse;
-  public boolean sslEnabled;
-  public String sslKeyStoreFile;
-  public String sslKeyPassword;
-  public String sslKeyStorePassword;
-  public boolean searchLoggingEnabled;
-  public Settings settings;
-  public String sslKeyAlias;
-  public String sslCertChainPem;
-  public String sslPrivKeyPem;
-  public boolean oauthEnabled;
-  public String cookieName;
-  public String cookieSecret;
-  public String tokenSecret;
-  public String tokenClientId;
-  public ACL acl;
+	public boolean enabled;
+	public String verbosity;
+	public String forbiddenResponse;
+	public boolean sslEnabled;
+	public String sslKeyStoreFile;
+	public String sslKeyPassword;
+	public String sslKeyStorePassword;
+	public boolean searchLoggingEnabled;
+	public Settings settings;
+	public String sslKeyAlias;
+	public String sslCertChainPem;
+	public String sslPrivKeyPem;
+	public boolean oauthEnabled;
+	public String cookieName;
+	public String cookieSecret;
+	public String tokenSecret;
+	public String tokenClientId;
+	public ACL acl;
 
-  @Inject
-  public ConfigurationHelper(Settings settings, Client client) {
-    this.client = client;
-    this.settings = settings;
-    readSettings(settings);
+	@Inject
+	public ConfigurationHelper(Settings settings, Client client) throws Exception {
+		this.client = client;
+		this.settings = settings;
+		readSettings(settings);
 
-    // Try to fetch from
-    if (client != null) {
-      try {
-        updateSettingsFromIndex(client);
-      } catch (IllegalStateException ise) {
-        // Not ready yet.
-        return;
-      } catch (Exception e) {
-        e.printStackTrace();
-        logger.info("No cluster-wide settings found.. You need RedonlyREST Kibana plugin to make this work :) ");
-      }
-    }
+		// Try to fetch from
+		if (client != null) {
+			try {
+				updateSettingsFromIndex(client);
+			} catch (IllegalStateException ise) {
+				// Not ready yet.
+				return;
+			} catch (Exception e) {
+				e.printStackTrace();
+				logger.info(
+						"No cluster-wide settings found.. You need RedonlyREST Kibana plugin to make this work :) ");
+			}
+		}
 
-  }
+	}
 
-  public static ConfigurationHelper getInstance(Settings s, Client c) {
-    if (currentInstance == null) {
-      currentInstance = new ConfigurationHelper(s, c);
-    }
-    return currentInstance;
-  }
+	public static ConfigurationHelper getInstance(Settings s, Client c) throws Exception {
+		if (currentInstance == null) {
+			currentInstance = new ConfigurationHelper(s, c);
+		}
+		return currentInstance;
+	}
 
-  private static Setting<String> str(String name) {
-    return new Setting<>(name, "", (value) -> value, Setting.Property.NodeScope);
-  }
+	private static Setting<String> str(String name) {
+		return new Setting<>(name, "", (value) -> value, Setting.Property.NodeScope);
+	}
 
-  private static Setting<Boolean> bool(String name) {
-    return Setting.boolSetting(name, Boolean.FALSE, Setting.Property.NodeScope);
-  }
+	private static Setting<Boolean> bool(String name) {
+		return Setting.boolSetting(name, Boolean.FALSE, Setting.Property.NodeScope);
+	}
 
-  //  private static Setting<Integer> integ(String name) {
-//    return Setting.intSetting(name, 0, Integer.MAX_VALUE, Setting.Property.NodeScope);
-//  }
-  private static Setting<Settings> grp(String name) {
-    return Setting.groupSetting(name, new Setting.Property[]{Setting.Property.Dynamic, Setting.Property.NodeScope});
-  }
+	// private static Setting<Integer> integ(String name) {
+	// return Setting.intSetting(name, 0, Integer.MAX_VALUE,
+	// Setting.Property.NodeScope);
+	// }
+	private static Setting<Settings> grp(String name) {
+		return Setting.groupSetting(name,
+				new Setting.Property[] { Setting.Property.Dynamic, Setting.Property.NodeScope });
+	}
 
-//  private static Setting<List<String>> strA(String name) {
-//    return Setting.listSetting(name, new ArrayList<>(), (s) -> s.toString(), Setting.Property.NodeScope);
-//  }
+	// private static Setting<List<String>> strA(String name) {
+	// return Setting.listSetting(name, new ArrayList<>(), (s) -> s.toString(),
+	// Setting.Property.NodeScope);
+	// }
 
-  public static List<Setting<?>> allowedSettings() {
-    String prefix = "readonlyrest.";
-    String rule_prefix = prefix + "template_rules.";
-    String users_prefix = prefix + "users.";
-    String ldaps_prefix = prefix + "ldaps.";
-    String groups_prefix = prefix + "rules.";
-    String proxy_auth_configs_prefix = prefix + "proxy_auth_configs.";
-    String user_groups_providers_prefix = prefix + "user_groups_providers.";
-    String external_authentication_service_configs_prefix = prefix + "external_authentication_service_configs.";
+	public static List<Setting<?>> allowedSettings() {
+		String prefix = "readonlyrest.";
+		String rule_prefix = prefix + "template_rules.";
+		String users_prefix = prefix + "users.";
+		String ldaps_prefix = prefix + "ldaps.";
+		String groups_prefix = prefix + "rules.";
+		String proxy_auth_configs_prefix = prefix + "proxy_auth_configs.";
+		String user_groups_providers_prefix = prefix + "user_groups_providers.";
+		String external_authentication_service_configs_prefix = prefix + "external_authentication_service_configs.";
 
-    return Arrays.asList(
-        bool(prefix + "enable"),
-        str(prefix + "response_if_req_forbidden"),
-        bool(prefix + "searchlog"),
-        bool(prefix + "oauth_enabled"),
-        str(prefix + "cookieSecret"),
-        str(prefix + "cookieName"),
-        str(prefix + "tokenClientId"),
-        str(prefix + "tokenSecret"),
-        // SSL
-        bool(prefix + "ssl.enable"),
-        str(prefix + "ssl.keystore_file"),
-        str(prefix + "ssl.keystore_pass"),
-        str(prefix + "ssl.key_alias"),
-        str(prefix + "ssl.key_pass"),
-        str(prefix + "ssl.privkey_pem"),
-        str(prefix + "ssl.certchain_pem"),
+		return Arrays.asList(bool(prefix + "enable"), str(prefix + "response_if_req_forbidden"), str(prefix + "config"),
+				bool(prefix + "searchlog"), bool(prefix + "oauth_enabled"), str(prefix + "cookieSecret"),
+				str(prefix + "cookieName"), str(prefix + "tokenClientId"), str(prefix + "tokenSecret"),
+				// SSL
+				bool(prefix + "ssl.enable"), str(prefix + "ssl.keystore_file"), str(prefix + "ssl.keystore_pass"),
+				str(prefix + "ssl.key_alias"), str(prefix + "ssl.key_pass"), str(prefix + "ssl.privkey_pem"),
+				str(prefix + "ssl.certchain_pem"),
 
-        grp(rule_prefix),
-        grp(users_prefix),
-        grp(ldaps_prefix),
-        grp(groups_prefix),
-        grp(proxy_auth_configs_prefix),
-        grp(user_groups_providers_prefix),
-        grp(external_authentication_service_configs_prefix)
-        // Rules
-//        str(rule_prefix + "name"),
-//        str(rule_prefix + "accept_x-forwarded-for_header"),
-//        str(rule_prefix + "auth_key"),
-//        str(rule_prefix + "auth_key_sha1"),
-//        str(rule_prefix + "uri_re"),
-//        str(rule_prefix + "methods"),
-//        integ(rule_prefix + "maxBodyLength"),
-//        strA(rule_prefix + "indices"),
-//        strA(rule_prefix + "hosts"),
-//        strA(rule_prefix + "groups"),
-//
-//        // Users
-//        str(users_prefix + "username"),
-//        str(users_prefix + "auth_key"),
-//        strA(users_prefix + "groups")
+				grp(rule_prefix), grp(users_prefix), grp(ldaps_prefix), grp(groups_prefix),
+				grp(proxy_auth_configs_prefix), grp(user_groups_providers_prefix),
+				grp(external_authentication_service_configs_prefix)
+		// Rules
+		// str(rule_prefix + "name"),
+		// str(rule_prefix + "accept_x-forwarded-for_header"),
+		// str(rule_prefix + "auth_key"),
+		// str(rule_prefix + "auth_key_sha1"),
+		// str(rule_prefix + "uri_re"),
+		// str(rule_prefix + "methods"),
+		// integ(rule_prefix + "maxBodyLength"),
+		// strA(rule_prefix + "indices"),
+		// strA(rule_prefix + "hosts"),
+		// strA(rule_prefix + "groups"),
+		//
+		// // Users
+		// str(users_prefix + "username"),
+		// str(users_prefix + "auth_key"),
+		// strA(users_prefix + "groups")
 
-    );
-  }
+		);
+	}
 
-  public static void setRequirePassword(boolean requirePass) {
-    requirePassword = requirePass;
-  }
+	public static void setRequirePassword(boolean requirePass) {
+		requirePassword = requirePass;
+	}
 
-  public static boolean doesRequirePassword(){
-    return requirePassword;
-  }
+	public static boolean doesRequirePassword() {
+		return requirePassword;
+	}
 
-  public static boolean isOAuthEnabled() {
-	return isOAuthEnabled;
-  }
-  
-  public void updateSettingsFromIndex(Client client) throws ResourceNotFoundException {
-    GetResponse resp = client.prepareGet(".readonlyrest", "settings", "1").get();
-    if (!resp.isExists()) {
-      throw new ElasticsearchException("no settings found in index");
-    }
-    String yaml = (String) resp.getSource().get("settings");
-    Settings settings = Settings.builder().loadFromSource(yaml, XContentType.YAML).build();
-    readSettings(settings);
-  }
+	public static boolean isOAuthEnabled() {
+		return isOAuthEnabled;
+	}
 
-  private void readSettings(Settings settings) {
-    Settings s = settings.getByPrefix("readonlyrest.");
-    this.settings = settings;
-    verbosity = s.get("verbosity", "info");
-    enabled = s.getAsBoolean("enable", s.getByPrefix("access_control_rules").size() > 0);
+	public void updateSettingsFromIndex(Client client) throws Exception {
+		GetResponse resp = client.prepareGet(".readonlyrest", "settings", "1").get();
+		if (!resp.isExists()) {
+			throw new ElasticsearchException("no settings found in index");
+		}
+		String yaml = (String) resp.getSource().get("settings");
+		Settings settings = Settings.builder().loadFromSource(yaml, XContentType.YAML).build();
+		readSettings(settings);
+	}
 
-    forbiddenResponse = s.get("response_if_req_forbidden", "Forbidden").trim();
-    oauthEnabled = s.getAsBoolean("oauth_enabled", false);
-    cookieName = s.get("cookieName");
-    cookieSecret = s.get("cookieSecret");
-    tokenClientId = s.get("tokenClientId");
-    tokenSecret = s.get("tokenSecret");
-    isOAuthEnabled = oauthEnabled;
-    // -- SSL
-    sslEnabled = s.getAsBoolean("ssl.enable", s.getByPrefix("ssl").size() > 1);
-    if (sslEnabled) {
-      logger.debug("SSL: Enabled");
-    }
-    else {
-      logger.debug("SSL: Disabled");
-    }
+	private void readSettings(Settings settings) throws Exception {
+		Settings configFileSet = settings.getByPrefix("readonlyrest.");
+		enabled = configFileSet.getAsBoolean("enable", false);
+		if (enabled) {
+			String configFile = configFileSet.get("config");
+			Settings b = null;
+			try {
+				Path path = FileSystems.getDefault().getPath(configFile);
+				b = Settings.builder().loadFromPath(path).build();
+			} catch (Exception e) {
+				String errorMsg = "Can't load config from file " + configFile;
+				throw new ElasticsearchException(errorMsg);
+			}
+			Settings s = b.getByPrefix("readonlyrest.");
+			this.settings = b;
+			verbosity = s.get("verbosity", "info");
 
-    sslKeyStoreFile = s.get("ssl.keystore_file");
-    sslKeyStorePassword = s.get("ssl.keystore_pass");
-    sslKeyPassword = s.get("ssl.key_pass"); // fallback
-    sslKeyAlias = s.get("ssl.key_alias");
-    sslPrivKeyPem = s.get("ssl.privkey_pem");
-    sslCertChainPem = s.get("ssl.certchain_pem");
+			forbiddenResponse = s.get("response_if_req_forbidden", "Forbidden").trim();
+			oauthEnabled = s.getAsBoolean("oauth_enabled", false);
+			cookieName = s.get("cookieName");
+			cookieSecret = s.get("cookieSecret");
+			tokenClientId = s.get("tokenClientId");
+			tokenSecret = s.get("tokenSecret");
+			isOAuthEnabled = oauthEnabled;
+			// -- SSL
+			sslEnabled = s.getAsBoolean("ssl.enable", s.getByPrefix("ssl").size() > 1);
+			if (sslEnabled) {
+				logger.debug("SSL: Enabled");
+			} else {
+				logger.debug("SSL: Disabled");
+			}
 
-    searchLoggingEnabled = s.getAsBoolean("searchlog", false);
-    acl = new ACL(client, this);
+			sslKeyStoreFile = s.get("ssl.keystore_file");
+			sslKeyStorePassword = s.get("ssl.keystore_pass");
+			sslKeyPassword = s.get("ssl.key_pass"); // fallback
+			sslKeyAlias = s.get("ssl.key_alias");
+			sslPrivKeyPem = s.get("ssl.privkey_pem");
+			sslCertChainPem = s.get("ssl.certchain_pem");
 
-    currentInstance = this;
-  }
+			searchLoggingEnabled = s.getAsBoolean("searchlog", false);
+			acl = new ACL(client, this);
+		}
+		currentInstance = this;
+
+	}
 
 }

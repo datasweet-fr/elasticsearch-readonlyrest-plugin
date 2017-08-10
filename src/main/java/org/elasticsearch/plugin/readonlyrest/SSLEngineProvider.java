@@ -45,7 +45,7 @@ public class SSLEngineProvider {
   private SslContext context = null;
 
   @Inject
-  public SSLEngineProvider(Settings settings) {
+  public SSLEngineProvider(Settings settings) throws Exception {
     this.conf = ConfigurationHelper.getInstance(settings, null);
     if (conf.sslEnabled) {
       if (!Strings.isNullOrEmpty(conf.sslCertChainPem) && !Strings.isNullOrEmpty(conf.sslPrivKeyPem)) {
