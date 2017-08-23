@@ -80,8 +80,8 @@ public class SearchlogSyncRule extends SyncRule {
               ", IDX:" + Arrays.toString(searchRequest.indices()) +
               ", TYP:" + Arrays.toString(searchRequest.types()) +
               ", SRC:" + convertToJson(searchRequest.source().buildAsBytes()) +
-              ", HIT:" + searchResponse.getHits().totalHits() +
-              ", RES:" + searchResponse.getHits().hits().length +
+              ", HIT:" + searchResponse.getHits().totalHits +
+              ", RES:" + searchResponse.getHits().getHits().length +
               " }"
       );
     }
