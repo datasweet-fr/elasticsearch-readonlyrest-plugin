@@ -125,7 +125,10 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 		if (!isDocFilteringEnabled)
 			return reader;
 		
-		byte [] data = Base64.getDecoder().decode(threadContext.getHeader(ThreadConstants.token));
+		String headerToken = threadContext.getHeader(ThreadConstants.token);
+		if (headerToken == null)
+			return reader;
+		byte [] data = Base64.getDecoder().decode(headerToken);
         ObjectInputStream ois;
         OAuthToken token = null;
 		try {
