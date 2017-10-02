@@ -20,6 +20,11 @@ package org.elasticsearch.plugin.readonlyrest;
 import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
 import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.util.Base64;
+
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
@@ -52,146 +57,143 @@ import org.elasticsearch.threadpool.ThreadPool;
  */
 @Singleton
 public class IndexLevelActionFilter extends AbstractComponent implements ActionFilter {
-  private final ThreadPool threadPool;
-  private final IndexNameExpressionResolver indexResolver;
-  private ClusterService clusterService;
-  private ConfigurationHelper conf;
+	private final ThreadPool threadPool;
+	private final IndexNameExpressionResolver indexResolver;
+	private ClusterService clusterService;
+	private ConfigurationHelper conf;
 
-  @Inject
-  public IndexLevelActionFilter(Settings settings, ConfigurationHelper conf,
-                                ClusterService clusterService, ThreadPool threadPool,
-                                IndexNameExpressionResolver indexResolver) {
-    super(settings);
-    this.conf = conf;
-    this.clusterService = clusterService;
-    this.threadPool = threadPool;
-    this.indexResolver = indexResolver;
+	@Inject
+	public IndexLevelActionFilter(Settings settings, ConfigurationHelper conf, ClusterService clusterService,
+			ThreadPool threadPool, IndexNameExpressionResolver indexResolver) {
+		super(settings);
+		this.conf = conf;
+		this.clusterService = clusterService;
+		this.threadPool = threadPool;
+		this.indexResolver = indexResolver;
 
-    logger.info("Readonly REST plugin was loaded...");
+		logger.info("Readonly REST plugin was loaded...");
 
-    if (!conf.enabled) {
-      logger.info("Readonly REST plugin is disabled!");
-      return;
-    }
+		if (!conf.enabled) {
+			logger.info("Readonly REST plugin is disabled!");
+			return;
+		}
 
-    logger.info("Readonly REST plugin is enabled!");
-  }
+		logger.info("Readonly REST plugin is enabled!");
+	}
 
-  @Override
-  public int order() {
-    return 0;
-  }
+	@Override
+	public int order() {
+		return 0;
+	}
 
-  @Override
-  public <Request extends ActionRequest, Response extends ActionResponse> void apply(Task task,
-      String action,
-      Request request,
-      ActionListener<Response> listener,
-      ActionFilterChain<Request, Response> chain) {
-    // Skip if disabled
-    if (!conf.enabled) {
-    	if (threadPool.getThreadContext().getTransient(ThreadConstants.pluginEnabled) == null)
-    		threadPool.getThreadContext().putTransient(ThreadConstants.pluginEnabled, false);
-      chain.proceed(task, action, request, listener);
-      return;
-    }
+	@Override
+	public <Request extends ActionRequest, Response extends ActionResponse> void apply(Task task, String action,
+			Request request, ActionListener<Response> listener, ActionFilterChain<Request, Response> chain) {
+		// Skip if disabled
+		RestChannel channel = ThreadRepo.channel.get();
+		boolean chanNull = channel == null;
 
-    if (threadPool.getThreadContext().getTransient(ThreadConstants.pluginEnabled) == null)
-		threadPool.getThreadContext().putTransient(ThreadConstants.pluginEnabled, true);
-    RestChannel channel = ThreadRepo.channel.get();
-    boolean chanNull = channel == null;
+		RestRequest req = null;
+		if (!chanNull) {
+			req = channel.request();
+		}
+		boolean reqNull = req == null;
 
-    RestRequest req = null;
-    if (!chanNull) {
-      req = channel.request();
-    }
-    boolean reqNull = req == null;
+		// This was not a REST message
+		if (reqNull && chanNull) {
+			chain.proceed(task, action, request, listener);
+			return;
+		}
 
-    // This was not a REST message
-    if (reqNull && chanNull) {
-      chain.proceed(task, action, request, listener);
-      return;
-    }
+		// Bailing out in case of catastrophical misconfiguration that would
+		// lead to insecurity
+		if (reqNull != chanNull) {
+			if (chanNull) {
+				throw new SecurityPermissionException(
+						"Problems analyzing the channel object. " + "Have you checked the security permissions?", null);
+			}
+			if (reqNull) {
+				throw new SecurityPermissionException(
+						"Problems analyzing the request object. " + "Have you checked the security permissions?", null);
+			}
+		}
 
-    // Bailing out in case of catastrophical misconfiguration that would lead to insecurity
-    if (reqNull != chanNull) {
-      if (chanNull) {
-        throw new SecurityPermissionException("Problems analyzing the channel object. " +
-                                                "Have you checked the security permissions?", null);
-      }
-      if (reqNull) {
-        throw new SecurityPermissionException("Problems analyzing the request object. " +
-                                                "Have you checked the security permissions?", null);
-      }
-    }
+		RequestContext rc = new RequestContext(channel, req, action, request, clusterService, indexResolver,
+				threadPool);
+		conf.acl.check(rc).exceptionally(throwable -> {
+			logger.warn("forbidden request: " + rc + " Reason: " + throwable.getMessage());
+			if (throwable.getCause() instanceof ResourceNotFoundException) {
+				logger.warn("Resource not found! ID: " + rc.getId() + "  " + throwable.getCause().getMessage());
+				sendNotFound((ResourceNotFoundException) throwable.getCause(), channel);
+				return null;
+			}
+			throwable.printStackTrace();
+			sendNotAuthResponse(channel);
+			return null;
+		})
 
+				.thenApply(result -> {
+					assert result != null;
+					OAuthToken token = rc.getToken();
+					if (token != null) {
+						ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				        ObjectOutputStream oos;
+						try {
+							oos = new ObjectOutputStream( baos );
+							oos.writeObject(token);
+					        oos.close();
+						} catch (IOException e) {
+							logger.info("Error while serializing token " + e.getLocalizedMessage());
+						}
+				        String encodedToken = Base64.getEncoder().encodeToString(baos.toByteArray());
+				        if (threadPool.getThreadContext().getHeader(ThreadConstants.token) == null)
+				        	threadPool.getThreadContext().putHeader(ThreadConstants.token, encodedToken);
+					}
+					if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
+						try {
+							@SuppressWarnings("unchecked")
+							ActionListener<Response> aclActionListener = (ActionListener<Response>) new ACLActionListener(
+									request, (ActionListener<ActionResponse>) listener, rc, result);
+							
+							chain.proceed(task, action, request, aclActionListener);
+							return null;
+						} catch (Throwable e) {
+							e.printStackTrace();
+						}
+						
+						chain.proceed(task, action, request, listener);
+						return null;
+					}
 
-    RequestContext rc = new RequestContext(channel, req, action, request, clusterService, indexResolver, threadPool);
-    conf.acl.check(rc)
-      .exceptionally(throwable -> {
-        logger.warn("forbidden request: " + rc + " Reason: " + throwable.getMessage());
-        if (throwable.getCause() instanceof ResourceNotFoundException) {
-          logger.warn("Resource not found! ID: " + rc.getId() + "  " + throwable.getCause().getMessage());
-          sendNotFound((ResourceNotFoundException) throwable.getCause(), channel);
-          return null;
-        }
-        throwable.printStackTrace();
-        sendNotAuthResponse(channel);
-        return null;
-      })
+					logger.warn("forbidden request: " + rc + " Reason: " + result.getBlock() + " (" + result.getBlock()
+							+ ")");
+					sendNotAuthResponse(channel);
+					return null;
+				});
+	}
 
-      .thenApply(result -> {
-        assert result != null;
-        OAuthToken token = rc.getToken();
-        if (token != null) {
-        	if (threadPool.getThreadContext().getTransient(ThreadConstants.userGroup) == null)
-        		threadPool.getThreadContext().putTransient(ThreadConstants.userGroup, token.getRoles());
-        	if (threadPool.getThreadContext().getTransient(ThreadConstants.capture) == null)
-        		threadPool.getThreadContext().putTransient(ThreadConstants.capture, token.getCapture());
-        }
-        if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
-          try {
-            @SuppressWarnings("unchecked")
-            ActionListener<Response> aclActionListener =
-              (ActionListener<Response>) new ACLActionListener(request, (ActionListener<ActionResponse>) listener, rc, result);
-            chain.proceed(task, action, request, aclActionListener);
-            return null;
-          } catch (Throwable e) {
-            e.printStackTrace();
-          }
+	private void sendNotAuthResponse(RestChannel channel) {
+		String reason = conf.forbiddenResponse;
 
-          chain.proceed(task, action, request, listener);
-          return null;
-        }
+		BytesRestResponse resp;
+		resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
 
-        logger.warn("forbidden request: " + rc + " Reason: " + result.getBlock() + " (" + result.getBlock() + ")");
-        sendNotAuthResponse(channel);
-        return null;
-      });
-  }
+		channel.sendResponse(resp);
+	}
 
-  private void sendNotAuthResponse(RestChannel channel) {
-    String reason = conf.forbiddenResponse;
+	private void sendNotFound(ResourceNotFoundException e, RestChannel channel) {
+		try {
+			XContentBuilder b = JsonXContent.contentBuilder();
+			b.startObject();
+			ElasticsearchException.generateFailureXContent(b, ToXContent.EMPTY_PARAMS, e, true);
+			b.endObject();
+			BytesRestResponse resp;
+			resp = new BytesRestResponse(NOT_FOUND, "application/json", b.string());
+			channel.sendResponse(resp);
+		} catch (Exception e1) {
+			e1.printStackTrace();
+		}
 
-    BytesRestResponse resp;
-    resp = new BytesRestResponse(FORBIDDEN, BytesRestResponse.TEXT_CONTENT_TYPE, reason);
-
-    channel.sendResponse(resp);
-  }
-
-  private void sendNotFound(ResourceNotFoundException e, RestChannel channel) {
-    try {
-      XContentBuilder b = JsonXContent.contentBuilder();
-      b.startObject();
-      ElasticsearchException.generateFailureXContent(b, ToXContent.EMPTY_PARAMS, e, true);
-      b.endObject();
-      BytesRestResponse resp;
-      resp = new BytesRestResponse(NOT_FOUND, "application/json", b.string());
-      channel.sendResponse(resp);
-    } catch (Exception e1) {
-      e1.printStackTrace();
-    }
-
-  }
+	}
 
 }
