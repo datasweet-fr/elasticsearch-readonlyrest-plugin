@@ -137,7 +137,6 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 			Object o  = ois.readObject();
 			if (o instanceof OAuthToken) {
 				token = (OAuthToken) o;
-				logger.info("FROM TOKEN : " + token.getPreferredUsername());
 			}
 	        ois.close();
 		} catch (IOException e) {
