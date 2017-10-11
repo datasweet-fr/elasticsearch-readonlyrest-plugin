@@ -22,9 +22,6 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
-import java.util.List;
-
-import org.apache.http.entity.SerializableEntity;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.plugin.readonlyrest.oauth.jiron.Jiron;
@@ -65,7 +62,6 @@ public class OAuthToken implements Serializable {
 	private String payload;
 	private String signature;
 	private String publicKey;
-	private List<String> capture;
 
 	private final Logger logger = Loggers.getLogger(getClass());
 
@@ -243,14 +239,6 @@ public class OAuthToken implements Serializable {
 
 	public void setSignature(String signature) {
 		this.signature = signature;
-	}
-
-	public List<String> getCapture() {
-		return capture;
-	}
-
-	public void setCapture(List<String> capture) {
-		this.capture = capture;
 	}
 
 	public OAuthToken parseEncryptedJWT(String jwt, String secret, String clientId) {

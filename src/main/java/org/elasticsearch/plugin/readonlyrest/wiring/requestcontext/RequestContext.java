@@ -72,6 +72,8 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
   private final IndexNameExpressionResolver indexResolver;
   private final Transactional<Set<String>> indices;
   private OAuthToken token;
+  private String groupRule;
+
   private final Transactional<Verbosity> logLevel = new Transactional<Verbosity>("rc-verbosity") {
     @Override
     public Verbosity initialize() {
@@ -190,6 +192,10 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
 
   public Boolean isReadRequest() {
     return RCUtils.isReadRequest(action);
+  }
+
+  public ThreadPool getThreadPool() {
+    return threadPool;
   }
 
   public String getRemoteAddress() {
@@ -372,8 +378,16 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
   }
 
   public void setToken(OAuthToken token) {
-	this.token = token;
+	  this.token = token;
   }
+
+  public String getGroupRule() {
+		return this.groupRule;
+	}
+
+	public void setGroupRule(String groupRule) {
+		this.groupRule = groupRule;
+	}
 
 @Override
   public String toString() {
@@ -417,6 +431,7 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
       ", CNT:" + (logger.isDebugEnabled() ? content : "<OMITTED, LENGTH=" + getContent().length() + ">") +
       ", HDR:" + theHeaders +
       ", HIS:" + hist +
+      ", RLG:[" + this.groupRule +
       " }";
   }
 

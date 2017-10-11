@@ -57,7 +57,7 @@ import org.elasticsearch.plugin.readonlyrest.SSLTransportNetty4;
 import org.elasticsearch.plugin.readonlyrest.rradmin.RRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.TransportRRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.rest.RestRRAdminAction;
-import org.elasticsearch.plugin.readonlyrest.security.CustomIndexSearcherWrapper;
+import org.elasticsearch.plugin.readonlyrest.security.FilterIndexSearcherWrapper;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.IngestPlugin;
 import org.elasticsearch.plugins.NetworkPlugin;
@@ -162,31 +162,21 @@ public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPl
 	public void onIndexModule(IndexModule module) {
 		module.setSearcherWrapper(indexService -> {
 			try {
-				return new CustomIndexSearcherWrapper(indexService, this.settings);
+				logger.info("Create new Filtering wrapper");
+				return new FilterIndexSearcherWrapper(
+					indexService.getIndexSettings(),
+					shardId -> indexService.newQueryShardContext(shardId.id(), null, () -> {
+						throw new IllegalArgumentException("permission filters are not allowed to use the current timestamp");
+					}),
+					indexService.cache().bitsetFilterCache(), 
+					indexService.getThreadPool().getThreadContext()
+				);
+
 			} catch (Exception e) {
 				logger.info("Document filtering is not available");
 			}
 			return null;
 		});
-		// if (documentFilteringEnabled) {
-		// module.setSearcherWrapper(indexService -> {
-		// try {
-		// return (IndexSearcherWrapper)
-		// this.documentFilteringConstructor.newInstance(indexService,
-		// this.settings);
-		// } catch (InstantiationException | IllegalAccessException |
-		// IllegalArgumentException
-		// | InvocationTargetException e) {
-		// logger.error("Error while trying to set the IndexSearch Wrapper");
-		// logger.error("Using empty one instead");
-		// logger.error(e.getLocalizedMessage());
-		// }
-		// return new EmptyIndexSearchWrapper(indexService, this.settings);
-		// });
-		// } else {
-		// module.setSearcherWrapper(indexService -> new
-		// EmptyIndexSearchWrapper(indexService, this.settings));
-		// }
 	}
 
 }

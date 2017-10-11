@@ -4,6 +4,7 @@ readonlyrest:
     cookieName: datasweet-oauth
     tokenClientId: datasweet
     tokenSecret: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhgkGtl05xLxrRsTleOFiWyfnuvz31ZfSCPa+TsWtpwp8T6o7B6c2zmlahi20kIiqpzR/Rj9JIPAU/Ch3btBMGIjjWClc0tw6CqnjdjMmDxUU4KaYsMEO1L2XjmbO4Y4MNDnksxWEm9Rc3ASjzrVK4Av85ySiupNOWPdFp78Wg2mEW+WS8/4oQA05kI7v4xwMQL6ytCY50hya4vnPbNwzrMXykirE5CqBTPcgvV3iM0a36w6IPLOAVlrysE1Btn6KPDNo9GtmUUxcefX46PCAUDj0WmLUh/PQKmLDm0/T4Y1nRzDpVqRWLc6rPr/30xJGtPB7K6gSvBmZQzZsPfB4pwIDAQAB
+    doc_filter_enable: true
 
     template_rules:
         Viewer:
@@ -64,7 +65,6 @@ readonlyrest:
               auth_oauth: true
               actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:monitor/*", "internal:indices/*"]
 
-        
         Admin:
             - name: Access allowed on everything for Admin
               type: allow
@@ -107,3 +107,8 @@ readonlyrest:
       type: Viewer
       indices: ["educadhoc-*"]
       filters: "editor:Didier"
+
+    - group: Hachette_Vi*
+      type: Viewer
+      indices: ["educadhoc-*"]
+      filters: "editor:Hachette"

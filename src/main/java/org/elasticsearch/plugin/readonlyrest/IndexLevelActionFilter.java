@@ -43,6 +43,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
+import org.elasticsearch.plugin.readonlyrest.security.UserTransient;
 import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 import org.elasticsearch.plugin.readonlyrest.wiring.ThreadRepo;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
@@ -134,23 +135,13 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
 				.thenApply(result -> {
 					assert result != null;
-					OAuthToken token = rc.getToken();
-					if (token != null) {
-						ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				        ObjectOutputStream oos;
-						try {
-							oos = new ObjectOutputStream( baos );
-							oos.writeObject(token);
-					        oos.close();
-						} catch (IOException e) {
-							logger.info("Error while serializing token " + e.getLocalizedMessage());
-						}
-				        String encodedToken = Base64.getEncoder().encodeToString(baos.toByteArray());
-				        if (threadPool.getThreadContext().getHeader(ThreadConstants.token) == null)
-				        	threadPool.getThreadContext().putHeader(ThreadConstants.token, encodedToken);
-					}
+
 					if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
 						try {
+							if (threadPool.getThreadContext().getTransient(ThreadConstants.userTransient) == null) {
+								threadPool.getThreadContext().putTransient(ThreadConstants.userTransient, UserTransient.CreateFromRequestContext(rc));
+							}
+
 							@SuppressWarnings("unchecked")
 							ActionListener<Response> aclActionListener = (ActionListener<Response>) new ACLActionListener(
 									request, (ActionListener<ActionResponse>) listener, rc, result);

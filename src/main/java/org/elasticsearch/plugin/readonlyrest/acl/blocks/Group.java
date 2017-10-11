@@ -32,6 +32,7 @@ public class Group {
 	public static final String EDITOR = "Editor";
 	public static final String VIEWER = "Viewer";
 	public static final String KIBANA = "Kibana";
+	public static final String INDEXER = "Indexer";
 
 	public Group(Settings s, Logger logger) {
 		if (s != null) {

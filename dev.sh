@@ -13,3 +13,5 @@ $ES_DIR/bin/elasticsearch-plugin install file://$PWD/build/distributions/${INI__
 cp -f ./dev/elasticsearch.yml $ES_DIR/config/
 cp -f ./dev/elasticsearch-ror.yml $ES_DIR/config/
 $ES_DIR/bin/elasticsearch
+
+# NOTE : si ca se lance pa (java security secret), ne pas oublier de mettre à jour les jar dans le $JAVA_HOME

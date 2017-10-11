@@ -17,13 +17,10 @@
 
 package org.elasticsearch.plugin.readonlyrest.security;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,8 +54,7 @@ import org.elasticsearch.common.logging.LoggerMessageFormat;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
-import org.elasticsearch.index.Index;
-import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.cache.bitset.BitsetFilterCache;
 import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.query.ParsedQuery;
@@ -68,32 +64,28 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardUtils;
-import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
-import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.utils.MatcherUtils;
 import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 
-public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
+public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 	private final BitsetFilterCache bitsetFilterCache;
 	private final ThreadContext threadContext;
 	private final Logger logger;
-	private final Index index;
 	private final Map<String, Map<String, String>> rule;
 	private static final String RULES_PREFIX = "rules";
 	private static boolean isDocFilteringEnabled;
-	// private final ScriptService scriptService;
 	private final Function<ShardId, QueryShardContext> queryShardContextProvider;
 
-	public CustomIndexSearcherWrapper(IndexService indexservice, Settings settings) throws Exception {
-		this.index = indexservice.index();
-		this.logger = Loggers.getLogger(this.getClass(), indexservice.getIndexSettings().getSettings(), new String[0]);
-		this.queryShardContextProvider = shardId -> indexservice.newQueryShardContext(shardId.id(), null, () -> {
-			throw new IllegalArgumentException("permission filters are not allowed to use the current timestamp");
-		});
-		this.bitsetFilterCache = indexservice.cache().bitsetFilterCache();
-		this.threadContext = indexservice.getThreadPool().getThreadContext();
-		// this.scriptService = scriptService;
-		Settings configFileSettings = settings.getByPrefix("readonlyrest.");
+	public FilterIndexSearcherWrapper(IndexSettings indexSettings,
+			Function<ShardId, QueryShardContext> queryShardContextProvider, BitsetFilterCache bitsetFilterCache,
+			ThreadContext threadContext) throws Exception {
+
+		this.logger = Loggers.getLogger(this.getClass(), indexSettings.getSettings(), new String[0]);
+		this.queryShardContextProvider = queryShardContextProvider;
+		this.bitsetFilterCache = bitsetFilterCache;
+		this.threadContext = threadContext;
+
+		Settings configFileSettings = indexSettings.getSettings().getByPrefix("readonlyrest.");
 		boolean enabled = configFileSettings.getAsBoolean("enable", false);
 		if (enabled) {
 			String configFile = "";
@@ -114,7 +106,6 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 			} else {
 				this.rule = new HashMap<String, Map<String, String>>();
 			}
-			logger.info("Document filtering available");
 		} else {
 			logger.info("Document filtering not available");
 			this.rule = new HashMap<String, Map<String, String>>();
@@ -122,37 +113,34 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 	}
 
 	protected DirectoryReader wrap(DirectoryReader reader) {
-		if (!isDocFilteringEnabled)
-			return reader;
-		
-		String headerToken = threadContext.getHeader(ThreadConstants.token);
-		if (headerToken == null)
-			return reader;
-		byte [] data = Base64.getDecoder().decode(headerToken);
-        ObjectInputStream ois;
-        OAuthToken token = null;
-		try {
-			ois = new ObjectInputStream( 
-			                                new ByteArrayInputStream(  data ) );
-			Object o  = ois.readObject();
-			if (o instanceof OAuthToken) {
-				token = (OAuthToken) o;
-			}
-	        ois.close();
-		} catch (IOException e) {
-			logger.error("Error while gathering token from header " + e.getLocalizedMessage());
-			return reader;
-		} catch (ClassNotFoundException e) {
-			logger.error("Error while gathering token from header " + e.getLocalizedMessage());
+		if (!isDocFilteringEnabled) {
+			logger.warn("Document filtering not available. Return defaut reader");
 			return reader;
 		}
-		if (token == null)
+
+		ShardId shardId = ShardUtils.extractShardId(reader);
+		if (shardId == null) {
+			throw new IllegalStateException(
+				LoggerMessageFormat.format("Couldn't extract shardId from reader [{}]", new Object[] { reader }));
+		}
+
+		UserTransient userTransient = threadContext.getTransient(ThreadConstants.userTransient);
+		if (userTransient == null) {
+			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
+		}
+
+		// No filtering for special users.
+		if (userTransient.isAdmin() || userTransient.isKibana() || userTransient.isIndexer())
 			return reader;
-		List<String> captureList = token.getCapture();
-		List<String> userGroups = token.getRoles();
-		// If user is admin, we don't want to wrap the request
-		if (userGroups == null || userGroups.contains(Group.ADMIN))
-			return reader;
+
+		List<String> userGroups = userTransient.getRoles();
+		
+		if (userGroups == null) {
+			throw new IllegalStateException("Couldn't extract groups from user.");
+		}
+
+		logger.info("Analyze for User Transient " + userTransient);
+		
 		Map<String, String> indexFilterMap = null;
 		String group = null;
 		for (String grp : userGroups) {
@@ -168,10 +156,14 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 		}
 		if (indexFilterMap == null)
 			return reader;
-		final String indice = getIndexFromMap(indexFilterMap, index.getName());
+
+		final String indice = getIndexFromMap(indexFilterMap, shardId.getIndexName());
+
 		if (indice == null)
 			return reader;
+
 		String filter = indexFilterMap.get(indice);
+		List<String> captureList = userTransient.getGroups();
 		if (captureList != null) {
 			for (int i = 0; i < captureList.size(); i++) {
 				int starIndex = filter.indexOf("*");
@@ -187,14 +179,11 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 				}
 			}
 		}
+
 		if (filter == null || filter.equals(""))
 			return reader;
+
 		try {
-			ShardId shardId = ShardUtils.extractShardId(reader);
-			if (shardId == null) {
-				throw new IllegalStateException(LoggerMessageFormat.format("Couldn't extract shardId from reader [{}]",
-						new Object[] { reader }));
-			}
 			BooleanQuery.Builder boolQuery = new BooleanQuery.Builder();
 			QueryShardContext queryShardContext = this.queryShardContextProvider.apply(shardId);
 			try {
@@ -313,7 +302,7 @@ public class CustomIndexSearcherWrapper extends IndexSearcherWrapper {
 					SparseFixedBitSet sparseFixedBitSet = (SparseFixedBitSet) roleQueryBits;
 					Bits wrappedLiveDocs = documentReader.getWrappedLiveDocs();
 					try {
-						CustomIndexSearcherWrapper.intersectScorerAndRoleBits(scorer, sparseFixedBitSet, leafCollector,
+						FilterIndexSearcherWrapper.intersectScorerAndRoleBits(scorer, sparseFixedBitSet, leafCollector,
 								wrappedLiveDocs);
 					} catch (CollectionTerminatedException var12_14) {
 					}
