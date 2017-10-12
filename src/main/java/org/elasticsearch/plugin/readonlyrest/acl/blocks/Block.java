@@ -191,7 +191,7 @@ public class Block {
 		MethodsSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
 		IndicesSyncRule.fromSettings(s, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
 		ActionsSyncRule.fromSettings(s, null).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
-		GroupsSyncRule.fromSettings(s, userList, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
+		GroupsSyncRule.fromSettings(s, grp).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
 		SearchlogSyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
 		VerbositySyncRule.fromSettings(s).map(AsyncRuleAdapter::wrap).ifPresent(rules::add);
 		// then we could check potentially slow async rules

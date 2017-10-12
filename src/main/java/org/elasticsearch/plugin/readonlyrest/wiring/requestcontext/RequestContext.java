@@ -45,6 +45,7 @@ import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.MatcherWithWildcards;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
+import org.elasticsearch.plugin.readonlyrest.security.RuleRole;
 import org.elasticsearch.plugin.readonlyrest.utils.BasicAuthUtils;
 import org.elasticsearch.plugin.readonlyrest.utils.BasicAuthUtils.BasicAuth;
 import org.elasticsearch.plugin.readonlyrest.utils.ReflecUtils;
@@ -72,7 +73,6 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
   private final IndexNameExpressionResolver indexResolver;
   private final Transactional<Set<String>> indices;
   private OAuthToken token;
-  private String groupRule;
 
   private final Transactional<Verbosity> logLevel = new Transactional<Verbosity>("rc-verbosity") {
     @Override
@@ -134,6 +134,24 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
 
     }
   };
+
+  private Transactional<Optional<RuleRole>> ruleRole = new Transactional<Optional<RuleRole>>("rc-rulerole-user") {
+    @Override
+    public Optional<RuleRole> initialize() {
+      return Optional.empty();
+    }
+
+    @Override
+    public Optional<RuleRole> copy(Optional<RuleRole> initial) {
+      return initial;
+    }
+
+    @Override
+    public void onCommit(Optional<RuleRole> value) {
+      return;
+    }
+  };
+ 
 
   public RequestContext(RestChannel channel, RestRequest request, String action,
                         ActionRequest actionRequest, ClusterService clusterService,
@@ -380,14 +398,14 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
   public void setToken(OAuthToken token) {
 	  this.token = token;
   }
+  
+  public void setRuleRole(RuleRole rr) {
+    ruleRole.mutate(Optional.of(rr));
+  }
 
-  public String getGroupRule() {
-		return this.groupRule;
-	}
-
-	public void setGroupRule(String groupRule) {
-		this.groupRule = groupRule;
-	}
+  public Optional<RuleRole> getRuleRole() {
+    return ruleRole.get();
+  }
 
 @Override
   public String toString() {
@@ -431,7 +449,7 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
       ", CNT:" + (logger.isDebugEnabled() ? content : "<OMITTED, LENGTH=" + getContent().length() + ">") +
       ", HDR:" + theHeaders +
       ", HIS:" + hist +
-      ", RLG:[" + this.groupRule +
+      ", RLG:" + (ruleRole.get().isPresent() ? ruleRole.get().get().getRuleId() + "=>" + ruleRole.get().get().getRoleLinked() : "(?)") +
       " }";
   }
 

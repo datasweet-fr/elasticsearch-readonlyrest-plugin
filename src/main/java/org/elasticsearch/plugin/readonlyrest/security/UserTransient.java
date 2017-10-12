@@ -1,65 +1,68 @@
 package org.elasticsearch.plugin.readonlyrest.security;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 
 public class UserTransient {
     private final String _username;
-    private final List<String> _captureList;
-    private final List<String> _roles;
+    private final String _ruleId;
+    private final String _role;
 
-    private static UserTransient Kibana = new UserTransient("Kibana", null, null);
-    private static UserTransient Indexer = new UserTransient("Indexer", null, null);
+    private static UserTransient Kibana = new UserTransient("USR_KIBANA", Group.KIBANA, Group.KIBANA);
+    private static UserTransient Indexer = new UserTransient("USR_INDEXER", Group.INDEXER, Group.INDEXER);
 
     public static UserTransient CreateFromRequestContext(RequestContext rc) {
         if (rc == null)
             throw new IllegalArgumentException("You need to provide the request context.");
 
+        if (!rc.getRuleRole().isPresent()) {
+            throw new IllegalStateException("Unable to extract rule and role from request context.");
+        }
+        RuleRole rr = rc.getRuleRole().get();
         OAuthToken token = rc.getToken();
 
         if (token == null) {
             if (!rc.getLoggedInUser().isPresent())
-                throw new IllegalArgumentException("Unable to extract user from request context.");
+                throw new IllegalStateException("Unable to extract user from request context.");
 
-            if (rc.getGroupRule().equals(Group.KIBANA))
+            if (Group.KIBANA.equals(rr.getRuleId()))
                 return Kibana;
 
-            if (rc.getGroupRule().equals(Group.INDEXER))
+            if (Group.INDEXER.equals(rr.getRuleId()))
                 return Indexer;
 
-            List<String> roles = new ArrayList<String>(1);
-            roles.add(rc.getGroupRule());
-            return new UserTransient(rc.getLoggedInUser().get().getId(), roles, null);
+            return new UserTransient(rc.getLoggedInUser().get().getId(), rr.getRuleId(), rr.getRoleLinked());
         } else {
-            return new UserTransient(token.getPreferredUsername(), token.getRoles(), rc.getGroupRule());
+            // Check the role linked is contained in token
+            if (!token.getRoles().contains(rr.getRoleLinked())) {
+                throw new IllegalStateException("Unable to merge role from request context & token.");
+            }
+
+            return new UserTransient(token.getPreferredUsername(), rr.getRuleId(), rr.getRoleLinked());
         }
     }
 
-    private UserTransient(String username, List<String> roles, String ruleGroup) {
+    private UserTransient(String username, String ruleId, String role) {
         this._username = username;
-        this._roles = roles;
-        this._captureList = createCaptureList(roles, ruleGroup);
+        this._ruleId = ruleId;
+        this._role = role;
     }
 
     public String getUsername() {
         return this._username;
     }
 
-    public List<String> getGroups() {
-        return this._captureList;
+    public String getRuleId() {
+        return this._ruleId;
     }
 
-    public List<String> getRoles() {
-        return this._roles;
+    public String getRole() {
+        return this._role;
     }
 
     public boolean isAdmin() {
-        return this._roles != null && this._roles.contains(Group.ADMIN);
+        return Group.ADMIN.equals(this._ruleId) && Group.ADMIN.equals(this._role);
     }
 
     public boolean isKibana() {
@@ -70,40 +73,12 @@ public class UserTransient {
         return this == Indexer;
     }
 
-    // A REVOIR
-    private List<String> createCaptureList(List<String> roles, String ruleGroup) {
-        if (ruleGroup == null || ruleGroup.isEmpty()) {
-            return null;
-        }
-
-        for (String role : roles) {
-            // \d for digit [0-9]
-            // Will replace all the group in the config where there is a * in the name (D*, DR*, C*, ...)
-            // Admin, Editor, Viewer, ... won't be impacted
-            String pattern = ruleGroup.replaceAll("\\*", "(\\.+)").replaceAll("\\?", "(\\.)");
-            Pattern p = Pattern.compile(pattern);
-            Matcher m = p.matcher(role);
-            boolean b = m.matches();
-            if (b) {
-                // Get the capture (for (D*, D01) returns 01) so we
-                // can replace it when we'll use the filters later
-                if (m.groupCount() > 0) {
-                    List<String> captureList = new ArrayList<>();
-                    for (int i = 1; i <= m.groupCount(); i++) {
-                        captureList.add(m.group(i));
-                    }
-                    return captureList;
-                }
-                return null;
-            }
-        }
-        return null;
-    }
 
     @Override
     public String toString() {
         return "{ USR: " + this._username + ", ADM: " + isAdmin() + ", KIB: " + isKibana() + ", IDX: " + isIndexer()
-                + ", ROLES: [" + (this._roles != null ? String.join(",", this._roles) : "") + "], CPTS: ["
-                + (this._captureList != null ? String.join(",", this._captureList) : "") + "]}";
+                + ", RULE: " + this._ruleId
+                + ", ROLE: " + this._role
+                + "}";
     }
 }

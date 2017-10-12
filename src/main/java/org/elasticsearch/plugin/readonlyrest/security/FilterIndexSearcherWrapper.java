@@ -53,6 +53,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.logging.LoggerMessageFormat;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.cache.bitset.BitsetFilterCache;
@@ -64,16 +65,15 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardUtils;
-import org.elasticsearch.plugin.readonlyrest.utils.MatcherUtils;
+import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 
 public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 	private final BitsetFilterCache bitsetFilterCache;
 	private final ThreadContext threadContext;
 	private final Logger logger;
-	private final Map<String, Map<String, String>> rule;
+	private final Map<String, GroupSettings> rules;
 	private static final String RULES_PREFIX = "rules";
-	private static boolean isDocFilteringEnabled;
 	private final Function<ShardId, QueryShardContext> queryShardContextProvider;
 
 	public FilterIndexSearcherWrapper(IndexSettings indexSettings,
@@ -99,29 +99,21 @@ public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 				throw new ElasticsearchException(errorMsg);
 			}
 			Settings s = b.getByPrefix("readonlyrest.");
-			isDocFilteringEnabled = s.getAsBoolean("doc_filter_enable", false);
+			boolean isDocFilteringEnabled = s.getAsBoolean("doc_filter_enable", false);
 			if (isDocFilteringEnabled) {
-				Map<String, Settings> rules = s.getGroups(RULES_PREFIX);
-				this.rule = readSettings(rules);
+				this.rules = readSettings(s);
 			} else {
-				this.rule = new HashMap<String, Map<String, String>>();
+				this.rules = null;
 			}
 		} else {
-			logger.info("Document filtering not available");
-			this.rule = new HashMap<String, Map<String, String>>();
+			this.rules = null;
 		}
 	}
 
 	protected DirectoryReader wrap(DirectoryReader reader) {
-		if (!isDocFilteringEnabled) {
+		if (this.rules == null) {
 			logger.warn("Document filtering not available. Return defaut reader");
 			return reader;
-		}
-
-		ShardId shardId = ShardUtils.extractShardId(reader);
-		if (shardId == null) {
-			throw new IllegalStateException(
-				LoggerMessageFormat.format("Couldn't extract shardId from reader [{}]", new Object[] { reader }));
 		}
 
 		UserTransient userTransient = threadContext.getTransient(ThreadConstants.userTransient);
@@ -133,52 +125,25 @@ public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 		if (userTransient.isAdmin() || userTransient.isKibana() || userTransient.isIndexer())
 			return reader;
 
-		List<String> userGroups = userTransient.getRoles();
-		
-		if (userGroups == null) {
-			throw new IllegalStateException("Couldn't extract groups from user.");
-		}
-
 		logger.info("Analyze for User Transient " + userTransient);
-		
-		Map<String, String> indexFilterMap = null;
-		String group = null;
-		for (String grp : userGroups) {
-			for (String id : this.rule.keySet()) {
-				Pattern p = Pattern.compile(id);
-				Matcher m = p.matcher(grp);
-				if (m.matches()) {
-					indexFilterMap = this.rule.get(id);
-					group = grp;
-					break;
-				}
-			}
+
+		GroupSettings rule = this.rules.get(userTransient.getRuleId());
+		if (rule == null) {
+			throw new IllegalStateException("Couldn't retrieve the rule from userTransient.");
 		}
-		if (indexFilterMap == null)
+
+		ShardId shardId = ShardUtils.extractShardId(reader);
+		if (shardId == null) {
+			throw new IllegalStateException(
+					LoggerMessageFormat.format("Couldn't extract shardId from reader [{}]", new Object[] { reader }));
+		}
+
+		final String indice = shardId.getIndexName();
+
+		if (!rule.matchIndex(indice))
 			return reader;
 
-		final String indice = getIndexFromMap(indexFilterMap, shardId.getIndexName());
-
-		if (indice == null)
-			return reader;
-
-		String filter = indexFilterMap.get(indice);
-		List<String> captureList = userTransient.getGroups();
-		if (captureList != null) {
-			for (int i = 0; i < captureList.size(); i++) {
-				int starIndex = filter.indexOf("*");
-				int markIndex = filter.indexOf("?");
-				// Replace the * char
-				if ((starIndex < markIndex && starIndex != -1) || (starIndex > markIndex && markIndex == -1)) {
-					filter = filter.replaceFirst("\\*", captureList.get(i));
-					continue;
-				}
-				// Replace the ? char
-				else {
-					filter = filter.replaceFirst("\\?", captureList.get(i));
-				}
-			}
-		}
+		String filter = rule.getFilter(new RuleRole(userTransient.getRuleId(), userTransient.getRole()));
 
 		if (filter == null || filter.equals(""))
 			return reader;
@@ -196,7 +161,7 @@ public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 			}
 			boolQuery.setMinimumNumberShouldMatch(1);
 			reader = DocumentReader.wrap(reader, this.bitsetFilterCache, new ConstantScoreQuery(boolQuery.build()));
-			logger.debug("Adding filter [" + filter + "] for indices [" + indice + "] for group [" + group + "]");
+			// logger.debug("Adding filter [" + filter + "] for indices [" + indice + "] for group [" + userTransient.getRuleId() + "]");
 			return reader;
 		} catch (IOException e) {
 			this.logger.error("Unable to setup document security");
@@ -204,50 +169,19 @@ public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 		}
 	}
 
-	private Map<String, Map<String, String>> readSettings(Map<String, Settings> rules) {
-		Map<String, Map<String, String>> res = new HashMap<String, Map<String, String>>();
-		for (Integer j = 0; j < rules.size(); j++) {
-			Map<String, String> indexFiltresMap = new HashMap<String, String>();
-			Settings s = rules.get(j.toString());
-			String[] indices = s.getAsArray("indices");
-			String filters = s.get("filters");
-			if (filters != null) {
-				filters = filters.replaceAll("\\*", "(\\.+)");
-				filters = filters.replaceAll("\\?", "(\\.)");
+	private Map<String, GroupSettings> readSettings(Settings s) {
+		try {
+			Map<String, Settings> r = s.getGroups(RULES_PREFIX);
+			Map<String, GroupSettings> res = new HashMap<String, GroupSettings>();
+			for (Settings ss : r.values()) {
+				GroupSettings gs = GroupSettings.CreateFromSettings(ss);
+				res.put(gs.getRuleId(), gs);
 			}
-			String group = s.get("group");
-			if (group != null) {
-				group = group.replaceAll("\\*", "(\\.+)");
-				group = group.replaceAll("\\?", "(\\.)");
-			}
-			for (int i = 0; i < indices.length; i++) {
-				indexFiltresMap.put(indices[i], filters);
-			}
-			res.put(group, indexFiltresMap);
-		}
-		return res;
-	}
-
-	private String getIndexFromMap(final Map<String, String> map, final String index) {
-
-		if (map == null) {
+			return res;
+		} catch (Exception e) {
+			logger.error("Unable to read settings for filter", e);
 			return null;
 		}
-
-		if (map.get(index) != null) {
-			return index;
-		} else if (map.get("*") != null) {
-			return "*";
-		}
-
-		// wildcard matching
-		for (final String key : map.keySet()) {
-			if (MatcherUtils.containsWildcard(key) && MatcherUtils.match(key, index)) {
-				return key;
-			}
-		}
-
-		return null;
 	}
 
 	protected IndexSearcher wrap(IndexSearcher indexSearcher) throws EngineException {

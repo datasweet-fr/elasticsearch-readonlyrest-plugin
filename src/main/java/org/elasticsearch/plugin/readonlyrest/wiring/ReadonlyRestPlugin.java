@@ -166,7 +166,7 @@ public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPl
 				return new FilterIndexSearcherWrapper(
 					indexService.getIndexSettings(),
 					shardId -> indexService.newQueryShardContext(shardId.id(), null, () -> {
-						throw new IllegalArgumentException("permission filters are not allowed to use the current timestamp");
+						throw new IllegalArgumentException("Unable to create new query shard context.");
 					}),
 					indexService.cache().bitsetFilterCache(), 
 					indexService.getThreadPool().getThreadContext()
