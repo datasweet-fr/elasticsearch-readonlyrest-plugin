@@ -103,12 +103,12 @@ readonlyrest:
     #   type: Viewer
     #   indices: ["*"]
     
-    - group: Viewer_Didier
+    - group: Viewer_*
       type: Viewer
       indices: ["educadhoc-*"]
-      filters: "editor:Didier"
+      filters: "editor:@{1}"
 
-    - group: Hachette_Vi*
+    - group: Hachette_*
       type: Viewer
       indices: ["educadhoc-*"]
       filters: "editor:Hachette"
