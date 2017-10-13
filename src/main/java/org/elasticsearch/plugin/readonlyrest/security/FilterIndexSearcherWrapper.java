@@ -25,8 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.DirectoryReader;
@@ -53,7 +51,6 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.logging.LoggerMessageFormat;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.cache.bitset.BitsetFilterCache;
@@ -65,7 +62,6 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardUtils;
-import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 
 public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
@@ -125,8 +121,6 @@ public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 		if (userTransient.isAdmin() || userTransient.isKibana() || userTransient.isIndexer())
 			return reader;
 
-		logger.info("Analyze for User Transient " + userTransient);
-
 		GroupSettings rule = this.rules.get(userTransient.getRuleId());
 		if (rule == null) {
 			throw new IllegalStateException("Couldn't retrieve the rule from userTransient.");
@@ -150,7 +144,7 @@ public class FilterIndexSearcherWrapper extends IndexSearcherWrapper {
 
 		try {
 			BooleanQuery.Builder boolQuery = new BooleanQuery.Builder();
-			QueryShardContext queryShardContext = this.queryShardContextProvider.apply(shardId);
+			QueryShardContext queryShardContext = this.queryShardContextProvider.apply(shardId); 
 			try {
 				QueryBuilder qb = QueryBuilders.boolQuery().must(QueryBuilders.queryStringQuery(filter));
 				ParsedQuery parsedQuery = queryShardContext.toQuery(qb);

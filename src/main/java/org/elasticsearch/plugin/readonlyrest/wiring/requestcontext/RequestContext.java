@@ -434,23 +434,19 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
     }
 
     String hist = Joiner.on(", ").join(history);
-    Optional<BasicAuth> optBasicAuth = BasicAuthUtils.getBasicAuthFromHeaders(getHeaders());
-    return "{ ID:" + id +
-      ", TYP:" + actionRequest.getClass().getSimpleName() +
-      ", USR:" + (loggedInUser.get().isPresent()
-      ? loggedInUser.get().get()
-      : (optBasicAuth.isPresent() ? optBasicAuth.get().getUserName() + "(?)" : "[no basic auth header]")) +
-      ", BRS:" + !Strings.isNullOrEmpty(requestHeaders.get("User-Agent")) +
-      ", ACT:" + action +
-      ", OA:" + getRemoteAddress() +
-      ", IDX:" + theIndices +
-      ", MET:" + request.method() +
-      ", PTH:" + request.path() +
-      ", CNT:" + (logger.isDebugEnabled() ? content : "<OMITTED, LENGTH=" + getContent().length() + ">") +
-      ", HDR:" + theHeaders +
-      ", HIS:" + hist +
-      ", RLG:" + (ruleRole.get().isPresent() ? ruleRole.get().get().getRuleId() + "=>" + ruleRole.get().get().getRoleLinked() : "(?)") +
-      " }";
+    return new StringBuilder()
+      .append("{ ID:").append(id)
+      .append(", TYP:").append(actionRequest.getClass().getSimpleName())
+      .append(", USR:").append((loggedInUser.get().isPresent() ? loggedInUser.get().get() : "(?)"))
+      .append(", ACT:").append(action)
+      .append(", OA:").append(getRemoteAddress())
+      .append(", IDX:").append(theIndices)
+      .append(", MET:").append(request.method())
+      .append(", PTH:").append(request.path())
+      .append(", HIS:").append(logger.isDebugEnabled() ? hist : "<DEBUG_ONLY>")
+      .append(", RLG:").append(ruleRole.get().isPresent() ? ruleRole.get().toString() : "(?)")
+      .append(" }")
+      .toString();
   }
 
 

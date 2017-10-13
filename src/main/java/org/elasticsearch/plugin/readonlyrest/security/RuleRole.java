@@ -36,4 +36,13 @@ public class RuleRole {
         }
         return captureList;
     }
+
+    @Override
+    public String toString() {
+        return new StringBuilder()
+            .append(this.ruleId)
+            .append("=>")
+            .append(this.forRole)
+            .toString();
+    }
 }

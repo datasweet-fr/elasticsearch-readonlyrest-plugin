@@ -20,16 +20,14 @@ package org.elasticsearch.plugin.readonlyrest;
 import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
 import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.util.Base64;
+import java.util.Collections;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -42,7 +40,6 @@ import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
-import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.security.UserTransient;
 import org.elasticsearch.plugin.readonlyrest.utils.ThreadConstants;
 import org.elasticsearch.plugin.readonlyrest.wiring.ThreadRepo;
@@ -50,6 +47,8 @@ import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContex
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
+import org.elasticsearch.script.Script;
+import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -138,20 +137,37 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
 					if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
 						try {
+							
+							if (request instanceof SearchRequest) {
+								// Search request, we need to tag user cause cache.
+								SearchRequest sr = (SearchRequest) request;
+								if (rc.getLoggedInUser().isPresent()) {
+									String username = new StringBuilder()
+										.append("'")
+										.append(rc.getLoggedInUser().get().getId())
+										.append("'")
+										.toString();
+									Script roleScript = new Script(ScriptType.INLINE, "painless", username, Collections.emptyMap());
+									sr.source().scriptField("rr_user", roleScript);
+									sr.source().fetchSource(true);
+								}
+							}
+
 							if (threadPool.getThreadContext().getTransient(ThreadConstants.userTransient) == null) {
-								threadPool.getThreadContext().putTransient(ThreadConstants.userTransient, UserTransient.CreateFromRequestContext(rc));
+								threadPool.getThreadContext().putTransient(ThreadConstants.userTransient,
+										UserTransient.CreateFromRequestContext(rc));
 							}
 
 							@SuppressWarnings("unchecked")
 							ActionListener<Response> aclActionListener = (ActionListener<Response>) new ACLActionListener(
 									request, (ActionListener<ActionResponse>) listener, rc, result);
-							
+
 							chain.proceed(task, action, request, aclActionListener);
 							return null;
 						} catch (Throwable e) {
 							e.printStackTrace();
 						}
-						
+
 						chain.proceed(task, action, request, listener);
 						return null;
 					}
