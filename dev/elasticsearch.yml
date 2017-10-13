@@ -89,4 +89,4 @@
 
 readonlyrest:
     enable: true
-    config: /Users/tcharlot/Downloads/elasticsearch-5.6.2/config/elasticsearch-ror.yml
+    config: /Users/tcharlot/Downloads/elasticsearch-5.5.2/config/elasticsearch-ror.yml

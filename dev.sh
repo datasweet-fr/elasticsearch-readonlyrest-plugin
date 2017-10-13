@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ATTENTION ! Si vous changez le dossier penser à changer également dans ./dev/elasticsearch.yml
-ES_DIR=/Users/tcharlot/Downloads/elasticsearch-5.6.2
+ES_DIR=/Users/tcharlot/Downloads/elasticsearch-5.5.2
 source  ./dev/read_ini.sh
 read_ini ./gradle.properties
 
-./gradlew ror
+./gradlew clean updateSHAs assemble install
 
 #pkill  -f elasticsearch
 $ES_DIR/bin/elasticsearch-plugin remove ${INI__pluginName}
