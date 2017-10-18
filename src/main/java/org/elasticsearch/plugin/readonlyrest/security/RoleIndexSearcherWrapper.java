@@ -129,7 +129,6 @@ public class RoleIndexSearcherWrapper extends IndexSearcherWrapper {
 			logger.warn("NO MATCHING INDEX : [{}]", indice);
 			return reader;
 		}
-			
 
 		String filter = rule.getFilter(new RuleRole(userTransient.getRuleId(), userTransient.getRole()));
 
@@ -138,7 +137,7 @@ public class RoleIndexSearcherWrapper extends IndexSearcherWrapper {
 			return reader;
         }
 		
-		logger.info("WE WILL FILTER ON INDEX " + indice + " WITH FILTER " + filter);
+		// logger.info("WE WILL FILTER ON INDEX " + indice + " WITH FILTER " + filter);
 
 		try {
 			BooleanQuery.Builder boolQuery = new BooleanQuery.Builder();
