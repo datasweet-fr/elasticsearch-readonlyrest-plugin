@@ -23,13 +23,20 @@ import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 import java.util.Collections;
 
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.RealtimeRequest;
+import org.elasticsearch.action.fieldstats.FieldStatsRequest;
+import org.elasticsearch.action.get.GetRequest;
+import org.elasticsearch.action.get.MultiGetRequest;
+import org.elasticsearch.action.search.MultiSearchRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilterChain;
+import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -49,6 +56,7 @@ import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptType;
+import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -137,21 +145,49 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
 					if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
 						try {
-							
 							if (request instanceof SearchRequest) {
-								// Search request, we need to tag user cause cache.
-								SearchRequest sr = (SearchRequest) request;
-								if (rc.getLoggedInUser().isPresent()) {
-									String username = new StringBuilder()
-										.append("'")
-										.append(rc.getLoggedInUser().get().getId())
-										.append("'")
-										.toString();
-									Script roleScript = new Script(ScriptType.INLINE, "painless", username, Collections.emptyMap());
-									sr.source().scriptField("rr_user", roleScript);
-									sr.source().fetchSource(true);
-								}
+								((SearchRequest)request).requestCache(Boolean.FALSE);
 							}
+
+							// } else if (request instanceof FieldStatsRequest) {
+							// 	((FieldStatsRequest)request).setUseCache(false);
+							// } else if ( request instanceof UpdateRequest) {
+							// 	listener.onFailure(new ElasticsearchSecurityException("No update on document filter !"));
+							// } else if (request instanceof  RealtimeRequest) {
+							// 	logger.info("REAL TIME REQUEST ??");
+							// 	((RealtimeRequest)request).realtime(false);
+							// }
+
+							// if (!rc.getLoggedInUser().get().getId().equals("USR_KIBANA"))
+							// 	this.logger.info("REQUEST " + request.getClass().getName() + " SHOULD STORE " + request.getShouldStoreResult());
+
+						// 	if ( !rc.getLoggedInUser().isPresent()) {
+						// 		logger.error("NO USER LOGGED : " + request.getClass().getName());
+						// 	} 
+						// 	else if (request instanceof SearchRequest) {
+						// 		// Search request, we need to tag user cause cache.
+						// 		SearchRequest sr = (SearchRequest) request;
+						// 		// if (rc.getLoggedInUser().isPresent()) {
+						// 		// 	String username = new StringBuilder()
+						// 		// 		.append("'")
+						// 		// 		.append(rc.getLoggedInUser().get().getId())
+						// 		// 		.append("'")
+						// 		// 		.toString();
+						// 		// 	Script roleScript = new Script(ScriptType.INLINE, "painless", username, Collections.emptyMap());
+						// 		// 	sr.source().scriptField("rr_user", roleScript);
+						// 		// 	sr.source().fetchSource(true);
+									
+						// 		// 	if (!username.equals("'USR_KIBANA'"))
+						// 		// 		logger.info("SEARCH REQUEST " + sr);
+						// 		sr.requestCache(false);
+						// 		}
+							// } else if (request instanceof MultiSearchRequest) {
+							// 	MultiSearchRequest mr = (MultiSearchRequest) request;
+							// 	logger.info("MULTI SEARCH DALLAS MULTIPASS " + mr.requests().size());
+							// 	for (SearchRequest sr : mr.requests()) {
+							// 		logger.info("   => " + sr.toString());
+							// 	}
+							// }
 
 							if (threadPool.getThreadContext().getTransient(ThreadConstants.userTransient) == null) {
 								threadPool.getThreadContext().putTransient(ThreadConstants.userTransient,

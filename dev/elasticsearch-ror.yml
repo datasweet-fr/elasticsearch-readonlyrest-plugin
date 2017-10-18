@@ -103,12 +103,25 @@ readonlyrest:
     #   type: Viewer
     #   indices: ["*"]
     
-    - group: Viewer_*
-      type: Viewer
-      indices: ["educadhoc-*"]
-      filters: "editor:@{1}"
+    # - group: Viewer_*
+    #   type: Viewer
+    #   indices: ["educadhoc-*"]
+    #   filters: "editor:@{1}"
 
-    - group: Hachette_*
+    - group: Viewer_Hatier
       type: Viewer
       indices: ["educadhoc-*"]
-      filters: "editor:Hachette"
+      filters: "{ \"term\" : { \"editor\" : \"Hatier\" }}"
+      #filters: "editor:Hatier"
+
+    - group: Viewer_Didier
+      type: Viewer
+      indices: ["educadhoc-*"]
+      filters: "{ \"term\" : { \"editor\" : \"Didier\" }}"
+      #"{\"query\": { \"bool\": { \"must\": { \"match\": { \"editor\": \"Didier\" }}}}}"
+
+    - group: "Hachette_Viewer"
+      type: Viewer
+      indices: ["educadhoc-*"]
+      filters: "{ \"term\" : { \"editor\" : \"Hachette\" }}"
+      #filters: "editor:Hachette"

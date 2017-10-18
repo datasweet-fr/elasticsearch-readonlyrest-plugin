@@ -57,7 +57,7 @@ import org.elasticsearch.plugin.readonlyrest.SSLTransportNetty4;
 import org.elasticsearch.plugin.readonlyrest.rradmin.RRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.TransportRRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.rest.RestRRAdminAction;
-import org.elasticsearch.plugin.readonlyrest.security.FilterIndexSearcherWrapper;
+import org.elasticsearch.plugin.readonlyrest.security.RoleIndexSearcherWrapper;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.IngestPlugin;
 import org.elasticsearch.plugins.NetworkPlugin;
@@ -162,15 +162,10 @@ public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPl
 	public void onIndexModule(IndexModule module) {
 		module.setSearcherWrapper(indexService -> {
 			try {
-				logger.info("Create new Filtering wrapper");
-				return new FilterIndexSearcherWrapper(
-					indexService.getIndexSettings(),
-					shardId -> indexService.newQueryShardContext(shardId.id(), null, () -> {
-						throw new IllegalArgumentException("Unable to create new query shard context.");
-					}),
-					indexService.cache().bitsetFilterCache(), 
-					indexService.getThreadPool().getThreadContext()
-				);
+
+				//IndicesRequestCache.INDEX_CACHE_REQUEST_ENABLED_SETTING.get(indexService.getIndexSettings().getSettings()));
+				logger.info("Create new RoleIndexSearcher wrapper, [{}]", indexService.getIndexSettings().getIndex().getName());
+				return new RoleIndexSearcherWrapper(indexService);
 
 			} catch (Exception e) {
 				logger.info("Document filtering is not available");
