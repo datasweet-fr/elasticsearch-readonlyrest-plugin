@@ -1,43 +1,27 @@
 package org.elasticsearch.plugin.readonlyrest.security;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 
 import org.apache.logging.log4j.Logger;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BulkScorer;
-import org.apache.lucene.search.CollectionTerminatedException;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.ConjunctionDISI;
 import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.BitSet;
-import org.apache.lucene.util.BitSetIterator;
-import org.apache.lucene.util.Bits;
-import org.apache.lucene.util.SparseFixedBitSet;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.logging.LoggerMessageFormat;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
-import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.IndexService;
@@ -45,7 +29,6 @@ import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.index.shard.ShardId;
@@ -103,7 +86,24 @@ public class RoleIndexSearcherWrapper extends IndexSearcherWrapper {
 			return reader;
 		}
 
-		UserTransient userTransient = threadContext.getTransient(ThreadConstants.userTransient);
+		String userTransientEncoded = threadContext.getHeader(ThreadConstants.userTransient);
+		UserTransient userTransient = null;
+		if (userTransientEncoded == null)
+			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
+		byte [] data = Base64.getDecoder().decode(userTransientEncoded);
+        ObjectInputStream ois;
+		try {
+			ois = new ObjectInputStream(new ByteArrayInputStream(data));
+			Object o  = ois.readObject();
+			if (o instanceof UserTransient) {
+				userTransient = (UserTransient) o;
+			}
+	        ois.close();
+		} catch (IOException e) {
+			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
+		} catch (ClassNotFoundException e) {
+			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
+		}
 		if (userTransient == null) {
 			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
 		}
@@ -126,19 +126,15 @@ public class RoleIndexSearcherWrapper extends IndexSearcherWrapper {
         String indice = shardId.getIndexName();
 
 		if (!rule.matchIndex(indice)) {
-			logger.warn("NO MATCHING INDEX : [{}]", indice);
 			return reader;
 		}
 
 		String filter = rule.getFilter(new RuleRole(userTransient.getRuleId(), userTransient.getRole()));
 
 		if (filter == null || filter.equals("")) {
-			logger.warn("NO FILTER FOR RULE [{}]", userTransient.getRuleId());
 			return reader;
         }
 		
-		// logger.info("WE WILL FILTER ON INDEX " + indice + " WITH FILTER " + filter);
-
 		try {
 			BooleanQuery.Builder boolQuery = new BooleanQuery.Builder();
             boolQuery.setMinimumNumberShouldMatch(1);

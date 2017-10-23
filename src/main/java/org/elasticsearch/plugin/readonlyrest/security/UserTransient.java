@@ -1,14 +1,22 @@
 package org.elasticsearch.plugin.readonlyrest.security;
 
+import java.io.Serializable;
+
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 
-public class UserTransient {
-    private final String _username;
+public class UserTransient implements Serializable {
+    /**
+	 * 
+	 */
+	private static final long serialVersionUID = -8866625802695512997L;
+	private final String _username;
     private final String _ruleId;
     private final String _role;
-
+    private Boolean isKibana = Boolean.FALSE;
+    private Boolean isAdmin = Boolean.FALSE;
+    private Boolean isIndexer = Boolean.FALSE;
     private static UserTransient Kibana = new UserTransient("USR_KIBANA", Group.KIBANA, Group.KIBANA);
     private static UserTransient Indexer = new UserTransient("USR_INDEXER", Group.INDEXER, Group.INDEXER);
 
@@ -26,11 +34,15 @@ public class UserTransient {
             if (!rc.getLoggedInUser().isPresent())
                 throw new IllegalStateException("Unable to extract user from request context.");
 
-            if (Group.KIBANA.equals(rr.getRuleId()))
-                return Kibana;
+            if (Group.KIBANA.equals(rr.getRuleId())) {
+            	Kibana.isKibana = Boolean.TRUE;
+            	return Kibana;
+            }
 
-            if (Group.INDEXER.equals(rr.getRuleId()))
-                return Indexer;
+            if (Group.INDEXER.equals(rr.getRuleId())) {
+            	Indexer.isIndexer = Boolean.TRUE;
+            	return Indexer;
+            }
 
             return new UserTransient(rc.getLoggedInUser().get().getId(), rr.getRuleId(), rr.getRoleLinked());
         } else {
@@ -65,12 +77,12 @@ public class UserTransient {
         return Group.ADMIN.equals(this._ruleId) && Group.ADMIN.equals(this._role);
     }
 
-    public boolean isKibana() {
-        return this == Kibana;
+    public Boolean isKibana() {
+        return this.isKibana;
     }
 
-    public boolean isIndexer() {
-        return this == Indexer;
+    public Boolean isIndexer() {
+        return this.isIndexer;
     }
 
 

@@ -20,23 +20,20 @@ package org.elasticsearch.plugin.readonlyrest;
 import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
 import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 
-import java.util.Collections;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.util.Base64;
 
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.action.RealtimeRequest;
-import org.elasticsearch.action.fieldstats.FieldStatsRequest;
-import org.elasticsearch.action.get.GetRequest;
-import org.elasticsearch.action.get.MultiGetRequest;
 import org.elasticsearch.action.search.MultiSearchRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilterChain;
-import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -54,9 +51,6 @@ import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContex
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.script.Script;
-import org.elasticsearch.script.ScriptType;
-import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -144,8 +138,19 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
 					if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
 						try {
-							if (threadPool.getThreadContext().getTransient(ThreadConstants.userTransient) == null) {
-								threadPool.getThreadContext().putTransient(ThreadConstants.userTransient, UserTransient.CreateFromRequestContext(rc));
+							UserTransient usr = UserTransient.CreateFromRequestContext(rc);
+							ByteArrayOutputStream baos = new ByteArrayOutputStream();
+					        ObjectOutputStream oos;
+							try {
+								oos = new ObjectOutputStream( baos );
+								oos.writeObject(usr);
+						        oos.close();
+							} catch (IOException e) {
+								logger.error("Error while serializing token " + e.getLocalizedMessage());
+							}
+					        String encodedUser = Base64.getEncoder().encodeToString(baos.toByteArray());
+							if (threadPool.getThreadContext().getHeader(ThreadConstants.userTransient) == null) {
+								threadPool.getThreadContext().putHeader(ThreadConstants.userTransient, encodedUser);
 							}
 
 							if (request instanceof SearchRequest) {
