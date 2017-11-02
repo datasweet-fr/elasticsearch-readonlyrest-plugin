@@ -1,0 +1,127 @@
+readonlyrest:
+    response_if_req_forbidden: Access is forbidden!
+    cookieSecret: 3eeadfea0896c1a51b41d09aa1eab3d6c24d2154
+    cookieName: datasweet-oauth
+    tokenClientId: datasweet
+    tokenSecret: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhgkGtl05xLxrRsTleOFiWyfnuvz31ZfSCPa+TsWtpwp8T6o7B6c2zmlahi20kIiqpzR/Rj9JIPAU/Ch3btBMGIjjWClc0tw6CqnjdjMmDxUU4KaYsMEO1L2XjmbO4Y4MNDnksxWEm9Rc3ASjzrVK4Av85ySiupNOWPdFp78Wg2mEW+WS8/4oQA05kI7v4xwMQL6ytCY50hya4vnPbNwzrMXykirE5CqBTPcgvV3iM0a36w6IPLOAVlrysE1Btn6KPDNo9GtmUUxcefX46PCAUDj0WmLUh/PQKmLDm0/T4Y1nRzDpVqRWLc6rPr/30xJGtPB7K6gSvBmZQzZsPfB4pwIDAQAB
+    doc_filter_enable: true
+
+    template_rules:
+        Viewer:
+            - name: Access allowed on PUT for Viewer
+              type: allow
+              indices: [".kibana"]
+              methods: [PUT]
+              auth_oauth: true
+              actions: ["indices:data/read/*", "indices:admin/mappings/fields/*", "indices:admin/mapping/put*"]
+
+            - name: Access allowed on GET for Viewer
+              type: allow
+              indices: [".kibana"]
+              methods: [GET]
+              kibana_access: ro
+              auth_oauth: true
+              actions: ["indices:data/read/*", "indices:admin/mappings/fields/*"]
+      
+            - name: Access allowed on POST for Viewer
+              type: allow
+              indices: [".kibana"]
+              methods: [POST]
+              auth_oauth: true
+              actions: ["indices:data/read/field_stats", "indices:data/read/msearch", "indices:data/read/search", "indices:admin/refresh*", "indices:data/read/mget*"]
+            
+            - name: Forbid access to monitor and administration functions to Viewer
+              type: forbid
+              indices: ["*"]
+              auth_oauth: true
+              actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:monitor/*", "internal:indices/*"]
+                
+            - name: Forbid access on POST, DELETE for specific requests for Viewer
+              type: forbid
+              indices: ["*"]
+              auth_oauth: true
+              methods: [POST, DELETE]
+              actions: ["indices:data/write/*"]
+
+        Editor:
+            - name: Access allowed on GET, PUT, POST for Editor
+              type: allow
+              indices: [".kibana"]
+              methods: [GET, POST, PUT]
+              kibana_access: rw
+              auth_oauth: true
+              actions: ["indices:data/*", "indices:admin/mappings/fields/*", "indices:admin/refresh*"]
+            
+            - name: Access allow on DELETE for Editor
+              type: allow
+              indices: [".kibana"]
+              methods: [DELETE]
+              auth_oauth: true
+              actions: ["indices:data/write/delete", "indices:data/write/bulk*", "indices:admin/refresh*"]
+              
+            - name: Forbid access to monitor and administration functions to Editor 
+              type: forbid
+              indices: ["*"]
+              auth_oauth: true
+              actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:monitor/*", "internal:indices/*"]
+
+        Admin:
+            - name: Access allowed on everything for Admin
+              type: allow
+              indices: ["*"]
+              auth_oauth: true
+              actions: ["cluster:admin/*", "cluster:monitor/*", "indices:admin/*", "indices:data/*", "indices:monitor/*", "internal:indices/*"]
+
+        Kibana:
+            - name: Access allowed to Kibana pings
+              type: allow
+              kibana_access: rw
+              auth_key_sha1: 25bca07378b26c00d3ecf5e7d30ae069e32d41e7
+              verbosity: error
+
+        Indexer:
+            - name: Access allowed for indexer
+              type: allow
+              auth_key_sha1: 0a1baf75e46daf9c6b2b69253225e867018bc8f7
+       
+    rules:
+    - group: Admin
+      type: Admin
+      indices: ["*"]
+
+    - group: Kibana
+      type: Kibana
+
+    - group: Indexer
+      type: Indexer
+
+    - group: Editor
+      type: Editor
+      indices: ["*"]
+
+    # - group: Viewer
+    #   type: Viewer
+    #   indices: ["*"]
+    
+    # - group: Viewer_*
+    #   type: Viewer
+    #   indices: ["educadhoc-*"]
+    #   filters: "editor:@{1}"
+
+    - group: Viewer_Hatier
+      type: Viewer
+      indices: ["educadhoc-*"]
+      filters: "{ \"term\" : { \"editor\" : \"Hatier\" }}"
+      #filters: "editor:Hatier"
+
+    - group: Viewer_Didier
+      type: Viewer
+      indices: ["educadhoc-*"]
+      filters: "{ \"term\" : { \"editor\" : \"Didier\" }}"
+      #"{\"query\": { \"bool\": { \"must\": { \"match\": { \"editor\": \"Didier\" }}}}}"
+
+    - group: "Hachette_Viewer"
+      type: Viewer
+      indices: ["educadhoc-*"]
+      filters: "{ \"term\" : { \"editor\" : \"Hachette\" }}"
+      #filters: "editor:Hachette"

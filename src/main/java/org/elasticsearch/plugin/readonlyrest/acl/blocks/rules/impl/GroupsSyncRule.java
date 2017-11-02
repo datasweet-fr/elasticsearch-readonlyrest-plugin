@@ -17,21 +17,18 @@
 
 package org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.impl;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleNotConfiguredException;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.SyncRule;
-import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.User;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
+import org.elasticsearch.plugin.readonlyrest.security.RuleRole;
 import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContext;
 
 /**
@@ -42,69 +39,80 @@ import org.elasticsearch.plugin.readonlyrest.wiring.requestcontext.RequestContex
  */
 public class GroupsSyncRule extends SyncRule {
 
-  //private final List<User> users;
-  private final List<String> groups;
-  private String kibanaGroup = "Kibana";
-  private String indexerGroup = "Indexer";
-  
-  public GroupsSyncRule(List<User> userList, Group grp) throws RuleNotConfiguredException {
-    super();
+	private final String group;
+	private final Pattern pattern;
 
-    if (grp == null || grp.getGroup() == null || grp.getGroup().isEmpty())
-    	throw new RuleNotConfiguredException();
-    this.groups = new ArrayList<>();
-    this.groups.add(grp.getGroup());
-  }
-
-  public static Optional<GroupsSyncRule> fromSettings(Settings s, List<User> userList, Group grp) {
-    try {
-      return Optional.of(new GroupsSyncRule(userList, grp));
-    } catch (RuleNotConfiguredException ignored) {
-      return Optional.empty();
+	private static final Map<String, String> SpecialUsr = createSpecialUsrs();
+    private static Map<String, String> createSpecialUsrs()
+    {
+        Map<String,String> myMap = new HashMap<String,String>();
+        myMap.put(Group.KIBANA, "USR_KIBANA");
+        myMap.put(Group.INDEXER, "Ind3xeur");
+        return myMap;
     }
-  }
 
-  @Override
-  public RuleExitResult match(RequestContext rc) {
-    	OAuthToken token = rc.getToken();
-    	List<String> commonGroups = new ArrayList<>(this.groups);
-		if ((commonGroups.contains(kibanaGroup) || commonGroups.contains(indexerGroup)) && token == null)
-			return MATCH;
-		if (commonGroups == null || commonGroups.isEmpty() || token == null || token.getRoles() == null)
-			return NO_MATCH;
-		// Using a set to remove all duplicates
-		Set<String> commonGroupsSet = new HashSet<>(commonGroups);
-		for (String role : token.getRoles()) {
-			// \d for digit [0-9]
-			// [0] because for now, there is only one group for one rule
-			String pattern = (String)commonGroupsSet.toArray()[0];
-			// Will replace all the group in the config where there is a * in the name (D*, DR*, C*, ...)
-			// Admin, Editor, Viewer, ... won't be impacted
-//			pattern = pattern.replaceAll("\\*", "(\\\\d+)");
-			pattern = pattern.replaceAll("\\*", "(\\.+)");
-			pattern = pattern.replaceAll("\\?", "(\\.)");
-			//pattern = pattern.replaceAll("\\*", "(\\.+)");
-			Pattern p = Pattern.compile(pattern);
-			Matcher m = p.matcher(role);
-			boolean b = m.matches();
-			if (b) {
-				// Get the capture (for (D*, D01) returns 01) so we
-				// can replace it when we'll use the filters later
-				if (m.groupCount() > 0) {
-					List<String> captureList = new ArrayList<>();
-					for (int i = 1; i <= m.groupCount(); i++) {
-						captureList.add(m.group(i));
-					}
-					token.setCapture(captureList);
-				}
-				return MATCH;
-			}
+	public GroupsSyncRule(Group grp) throws RuleNotConfiguredException {
+		super();
+
+		if (grp == null || grp.getGroup() == null || grp.getGroup().trim().isEmpty())
+			throw new RuleNotConfiguredException();
+		this.group = grp.getGroup().trim();
+
+		// Wildcard group, ie Viewer_DR*
+		if (this.group.contains("*")) {
+			String regex = "^" + ("\\Q" + this.group + "\\E").replace("*", "\\E.*\\Q") + "$";
+			this.pattern = Pattern.compile(regex);
+		} else {
+			this.pattern = null;
 		}
-		commonGroupsSet.retainAll(token.getRoles());
-//		if (!commonGroupsSet.isEmpty())
-//			return MATCH;
-		return NO_MATCH;
-  }
+	}
 
+	public static Optional<GroupsSyncRule> fromSettings(Settings s, Group grp) {
+		try {
+			return Optional.of(new GroupsSyncRule(grp));
+		} catch (RuleNotConfiguredException ignored) {
+			return Optional.empty();
+		}
+	}
+
+	@Override
+	public RuleExitResult match(RequestContext rc) {
+		OAuthToken token = rc.getToken();
+		if (token == null) {
+			String special = SpecialUsr.get(this.group);
+			if (special == null) 
+				return NO_MATCH;
+			
+			if (!rc.getLoggedInUser().isPresent())
+				return NO_MATCH;
+
+			String username = rc.getLoggedInUser().get().getId();
+			if (special.equals(username)) {
+				rc.setRuleRole(new RuleRole(this.group, this.group));
+				return  MATCH;
+			}
+
+			return NO_MATCH;
+		} else if (token.getRoles() == null) {
+			return NO_MATCH;
+		} else {
+			// Check get first role containing the group
+			for (String role : token.getRoles()) {
+				if ( this.pattern != null ) {
+					Matcher m = this.pattern.matcher(role);
+					if (m == null) {
+						continue;
+					  }
+					  if (m.find()) {
+						rc.setRuleRole(new RuleRole(this.group, role));
+						return MATCH;
+					  }
+				} else if ( this.group.equals(role) ) {
+					rc.setRuleRole(new RuleRole(this.group, role));
+					return MATCH;
+				}
+			}
+			return NO_MATCH;
+		}
+	}
 }
-

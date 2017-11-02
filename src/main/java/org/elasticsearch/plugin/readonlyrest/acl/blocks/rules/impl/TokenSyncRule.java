@@ -66,7 +66,6 @@ public class TokenSyncRule extends SyncRule {
 		rc.setToken(token);
 		token = rc.getToken();
 		if (token == null) {
-			rc.setLoggedInUser(new LoggedUser("Kibana"));
 			return NO_MATCH;
 		}
 		boolean valid = true;

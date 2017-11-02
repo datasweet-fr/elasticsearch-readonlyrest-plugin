@@ -17,8 +17,6 @@
 
 package org.elasticsearch.plugin.readonlyrest.wiring;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -52,8 +50,6 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.http.HttpServerTransport;
 import org.elasticsearch.index.IndexModule;
-import org.elasticsearch.index.IndexService;
-import org.elasticsearch.index.shard.IndexSearcherWrapper;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.plugin.readonlyrest.ConfigurationHelper;
 import org.elasticsearch.plugin.readonlyrest.IndexLevelActionFilter;
@@ -61,8 +57,7 @@ import org.elasticsearch.plugin.readonlyrest.SSLTransportNetty4;
 import org.elasticsearch.plugin.readonlyrest.rradmin.RRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.TransportRRAdminAction;
 import org.elasticsearch.plugin.readonlyrest.rradmin.rest.RestRRAdminAction;
-import org.elasticsearch.plugin.readonlyrest.security.EmptyIndexSearchWrapper;
-import org.elasticsearch.plugin.readonlyrest.utils.ClassHelper;
+import org.elasticsearch.plugin.readonlyrest.security.RoleIndexSearcherWrapper;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.IngestPlugin;
 import org.elasticsearch.plugins.NetworkPlugin;
@@ -77,135 +72,106 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.watcher.ResourceWatcherService;
 
 public class ReadonlyRestPlugin extends Plugin implements ScriptPlugin, ActionPlugin, IngestPlugin, NetworkPlugin {
-  private final Settings settings;
-  private final Logger logger = Loggers.getLogger(this.getClass());
-  private boolean documentFilteringEnabled = false;
-  private Constructor<?> documentFilteringConstructor;
-  private static final String docFilteringClass = "org.elasticsearch.plugin.readonlyrest.security.CustomIndexSearcherWrapper";
-  
-  public ReadonlyRestPlugin(Settings s) {
-    this.settings = s;
-    if (ClassHelper.isLoadable(docFilteringClass)) {
-    	try {
-    		documentFilteringConstructor = ClassHelper.loadClass(docFilteringClass).getConstructor(IndexService.class, Settings.class);
-    	} catch (NoSuchMethodException | SecurityException e) {
-    		logger.info("Document filtering plugin not available, reason: " + e.getLocalizedMessage());
-			documentFilteringEnabled = false;
-			documentFilteringConstructor = null;
-			return;
-    	}
-    	documentFilteringEnabled = documentFilteringConstructor != null;
-    	logger.info("Document filtering plugin available");
-    }
-    else {
-    	logger.info("Document filtering is not available");
-    }
-  }
+	private final Settings settings;
+	private final Logger logger = Loggers.getLogger(this.getClass());
 
-  @Override
-  public List<Class<? extends ActionFilter>> getActionFilters() {
-    return Collections.singletonList(IndexLevelActionFilter.class);
-  }
+	public ReadonlyRestPlugin(Settings s) {
+		this.settings = s;
+	}
 
-  @Override
-  public Map<String, Supplier<HttpServerTransport>> getHttpTransports(
-      Settings settings,
-      ThreadPool threadPool,
-      BigArrays bigArrays,
-      CircuitBreakerService circuitBreakerService,
-      NamedWriteableRegistry namedWriteableRegistry,
-      NamedXContentRegistry xContentRegistry,
-      NetworkService networkService,
-      HttpServerTransport.Dispatcher dispatcher) {
+	@Override
+	public List<Class<? extends ActionFilter>> getActionFilters() {
+		return Collections.singletonList(IndexLevelActionFilter.class);
+	}
 
-    return Collections.singletonMap(
-        "ssl_netty4", () -> new SSLTransportNetty4(settings, networkService, bigArrays, threadPool, xContentRegistry, dispatcher));
-  }
+	@Override
+	public Map<String, Supplier<HttpServerTransport>> getHttpTransports(Settings settings, ThreadPool threadPool,
+			BigArrays bigArrays, CircuitBreakerService circuitBreakerService,
+			NamedWriteableRegistry namedWriteableRegistry, NamedXContentRegistry xContentRegistry,
+			NetworkService networkService, HttpServerTransport.Dispatcher dispatcher) {
 
+		return Collections.singletonMap("ssl_netty4", () -> new SSLTransportNetty4(settings, networkService, bigArrays,
+				threadPool, xContentRegistry, dispatcher));
+	}
 
-  @Override
-  public Collection<Object> createComponents(Client client, ClusterService clusterService, ThreadPool threadPool,
-      ResourceWatcherService resourceWatcherService, ScriptService scriptService,
-      NamedXContentRegistry xContentRegistry) {
+	@Override
+	public Collection<Object> createComponents(Client client, ClusterService clusterService, ThreadPool threadPool,
+			ResourceWatcherService resourceWatcherService, ScriptService scriptService,
+			NamedXContentRegistry xContentRegistry) {
 
-    Collection<Object> fromSup = super.createComponents(client, clusterService, threadPool, resourceWatcherService,
-        scriptService, xContentRegistry
-    );
-    ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-    Runnable task = new Runnable() {
-      @Override
-      public void run() {
-        try {
-          logger.debug("[CLUSTERWIDE SETTINGS] checking index..");
-          ConfigurationHelper.getInstance(settings, client).updateSettingsFromIndex(client);
-          logger.info("Cluster-wide settings found, overriding elasticsearch.yml");
-          executor.shutdown();
-        } catch (ElasticsearchException ee) {
-          logger.info("[CLUSTERWIDE SETTINGS] settings not found, please install ReadonlyREST Kibana plugin." +
-              " Will keep on using elasticearch.yml.");
-          executor.shutdown();
-        } catch (Throwable t) {
-          logger.debug("[CLUSTERWIDE SETTINGS] index not ready yet..");
-          executor.schedule(this, 200, TimeUnit.MILLISECONDS);
-        }
-      }
-    };
-    executor.schedule(task, 200, TimeUnit.MILLISECONDS);
-    return fromSup;
-  }
+		Collection<Object> fromSup = super.createComponents(client, clusterService, threadPool, resourceWatcherService,
+				scriptService, xContentRegistry);
+		ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+		Runnable task = new Runnable() {
+			@Override
+			public void run() {
+				try {
+					logger.debug("[CLUSTERWIDE SETTINGS] checking index..");
+					ConfigurationHelper.getInstance(settings, client).updateSettingsFromIndex(client);
+					logger.info("Cluster-wide settings found, overriding elasticsearch.yml");
+					executor.shutdown();
+				} catch (ElasticsearchException ee) {
+					logger.info("[CLUSTERWIDE SETTINGS] settings not found, please install ReadonlyREST Kibana plugin."
+							+ " Will keep on using elasticearch.yml.");
+					executor.shutdown();
+				} catch (Throwable t) {
+					logger.debug("[CLUSTERWIDE SETTINGS] index not ready yet..");
+					executor.schedule(this, 200, TimeUnit.MILLISECONDS);
+				}
+			}
+		};
+		executor.schedule(task, 200, TimeUnit.MILLISECONDS);
+		return fromSup;
+	}
 
-  @Override
-  public List<Setting<?>> getSettings() {
-    return ConfigurationHelper.allowedSettings();
-  }
+	@Override
+	public List<Setting<?>> getSettings() {
+		return ConfigurationHelper.allowedSettings();
+	}
 
-  @Override
-  @SuppressWarnings({"unchecked", "rawtypes"})
-  public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-    return Collections.singletonList(
-        new ActionHandler(RRAdminAction.INSTANCE, TransportRRAdminAction.class, new Class[0]));
-  }
+	@Override
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+		return Collections
+				.singletonList(new ActionHandler(RRAdminAction.INSTANCE, TransportRRAdminAction.class, new Class[0]));
+	}
 
+	@Override
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public List<RestHandler> getRestHandlers(Settings settings, RestController restController,
+			ClusterSettings clusterSettings, IndexScopedSettings indexScopedSettings, SettingsFilter settingsFilter,
+			IndexNameExpressionResolver indexNameExpressionResolver, Supplier<DiscoveryNodes> nodesInCluster) {
+		return Collections.singletonList(new RestRRAdminAction(settings, restController));
+	}
 
-  @Override
-  @SuppressWarnings({"unchecked", "rawtypes"})
-  public List<RestHandler> getRestHandlers(
-      Settings settings, RestController restController, ClusterSettings clusterSettings,
-      IndexScopedSettings indexScopedSettings, SettingsFilter settingsFilter,
-      IndexNameExpressionResolver indexNameExpressionResolver, Supplier<DiscoveryNodes> nodesInCluster) {
-    return Collections.singletonList(new RestRRAdminAction(settings, restController));
-  }
+	@Override
+	public UnaryOperator<RestHandler> getRestHandlerWrapper(ThreadContext threadContext) {
+		return restHandler -> new RestHandler() {
+			@Override
+			public void handleRequest(RestRequest request, RestChannel channel, NodeClient client) throws Exception {
+				// Need to make sure we've fetched cluster-wide configuration at
+				// least once. This is super fast, so NP.
+				ConfigurationHelper.getInstance(settings, client);
+				ThreadRepo.channel.set(channel);
+				restHandler.handleRequest(request, channel, client);
+			}
+		};
+	}
 
-  @Override
-  public UnaryOperator<RestHandler> getRestHandlerWrapper(ThreadContext threadContext) {
-    return restHandler -> new RestHandler() {
-      @Override
-      public void handleRequest(RestRequest request, RestChannel channel, NodeClient client) throws Exception {
-        // Need to make sure we've fetched cluster-wide configuration at least once. This is super fast, so NP.
-        ConfigurationHelper.getInstance(settings, client);
-        ThreadRepo.channel.set(channel);
-        restHandler.handleRequest(request, channel, client);
-      }
-    };
-  }
-  
-  @Override
-  public void onIndexModule(IndexModule module) {
-	  if (documentFilteringEnabled) {
-		  module.setSearcherWrapper(indexService -> {
-			  try {
-				  return (IndexSearcherWrapper) this.documentFilteringConstructor.newInstance(indexService, this.settings);
-			  } catch (InstantiationException | IllegalAccessException | IllegalArgumentException
-						| InvocationTargetException e) {
-				  logger.error("Error while trying to set the IndexSearch Wrapper");
-				  logger.error("Using empty one instead");
-				  logger.error(e.getLocalizedMessage());
-			  }
-			  return new EmptyIndexSearchWrapper(indexService, this.settings);
-		  });
-	  } else {
-		  module.setSearcherWrapper(indexService -> new EmptyIndexSearchWrapper(indexService, this.settings));
-	  }
-  }
+	@Override
+	public void onIndexModule(IndexModule module) {
+		module.setSearcherWrapper(indexService -> {
+			try {
+
+				//IndicesRequestCache.INDEX_CACHE_REQUEST_ENABLED_SETTING.get(indexService.getIndexSettings().getSettings()));
+				logger.info("Create new RoleIndexSearcher wrapper, [{}]", indexService.getIndexSettings().getIndex().getName());
+				return new RoleIndexSearcherWrapper(indexService);
+
+			} catch (Exception e) {
+				logger.info("Document filtering is not available");
+			}
+			return null;
+		});
+	}
 
 }

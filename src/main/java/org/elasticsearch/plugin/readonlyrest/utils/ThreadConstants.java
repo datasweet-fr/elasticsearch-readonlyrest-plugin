@@ -19,7 +19,9 @@
 package org.elasticsearch.plugin.readonlyrest.utils;
 
 public class ThreadConstants {
-	public static final String userGroup = "_userGroup_";
-	public static final String pluginEnabled = "_enabled_";
-	public static final String capture = "_capture_";
+	public static final String userGroup = "_datasweet_userGroup_";
+	public static final String pluginEnabled = "_datasweet_plugin_enabled_";
+	public static final String capture = "_datasweet_capture_";
+	public static final String token = "_datasweet_token";
+	public static final String userTransient = "_datasweet_user";
 }

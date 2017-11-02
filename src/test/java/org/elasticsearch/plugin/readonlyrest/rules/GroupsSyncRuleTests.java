@@ -44,7 +44,7 @@ public class GroupsSyncRuleTests extends TestCase {
 		grp = Mockito.mock(Group.class);
 	}
 	private RuleExitResult match(RequestContext rc, Group grp) throws RuleNotConfiguredException {
-		SyncRule r = new GroupsSyncRule(null, grp);
+		SyncRule r = new GroupsSyncRule(grp);
 		return r.match(rc);
 	}
 	

@@ -45,6 +45,7 @@ import org.elasticsearch.plugin.readonlyrest.acl.blocks.Block;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.MatcherWithWildcards;
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.rules.RuleExitResult;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
+import org.elasticsearch.plugin.readonlyrest.security.RuleRole;
 import org.elasticsearch.plugin.readonlyrest.utils.BasicAuthUtils;
 import org.elasticsearch.plugin.readonlyrest.utils.BasicAuthUtils.BasicAuth;
 import org.elasticsearch.plugin.readonlyrest.utils.ReflecUtils;
@@ -72,6 +73,7 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
   private final IndexNameExpressionResolver indexResolver;
   private final Transactional<Set<String>> indices;
   private OAuthToken token;
+
   private final Transactional<Verbosity> logLevel = new Transactional<Verbosity>("rc-verbosity") {
     @Override
     public Verbosity initialize() {
@@ -133,6 +135,24 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
     }
   };
 
+  private Transactional<Optional<RuleRole>> ruleRole = new Transactional<Optional<RuleRole>>("rc-rulerole-user") {
+    @Override
+    public Optional<RuleRole> initialize() {
+      return Optional.empty();
+    }
+
+    @Override
+    public Optional<RuleRole> copy(Optional<RuleRole> initial) {
+      return initial;
+    }
+
+    @Override
+    public void onCommit(Optional<RuleRole> value) {
+      return;
+    }
+  };
+ 
+
   public RequestContext(RestChannel channel, RestRequest request, String action,
                         ActionRequest actionRequest, ClusterService clusterService,
                         IndexNameExpressionResolver indexResolver, ThreadPool threadPool) {
@@ -190,6 +210,10 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
 
   public Boolean isReadRequest() {
     return RCUtils.isReadRequest(action);
+  }
+
+  public ThreadPool getThreadPool() {
+    return threadPool;
   }
 
   public String getRemoteAddress() {
@@ -372,7 +396,15 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
   }
 
   public void setToken(OAuthToken token) {
-	this.token = token;
+	  this.token = token;
+  }
+  
+  public void setRuleRole(RuleRole rr) {
+    ruleRole.mutate(Optional.of(rr));
+  }
+
+  public Optional<RuleRole> getRuleRole() {
+    return ruleRole.get();
   }
 
 @Override
@@ -402,22 +434,19 @@ public class RequestContext extends Delayed implements IndicesRequestContext {
     }
 
     String hist = Joiner.on(", ").join(history);
-    Optional<BasicAuth> optBasicAuth = BasicAuthUtils.getBasicAuthFromHeaders(getHeaders());
-    return "{ ID:" + id +
-      ", TYP:" + actionRequest.getClass().getSimpleName() +
-      ", USR:" + (loggedInUser.get().isPresent()
-      ? loggedInUser.get().get()
-      : (optBasicAuth.isPresent() ? optBasicAuth.get().getUserName() + "(?)" : "[no basic auth header]")) +
-      ", BRS:" + !Strings.isNullOrEmpty(requestHeaders.get("User-Agent")) +
-      ", ACT:" + action +
-      ", OA:" + getRemoteAddress() +
-      ", IDX:" + theIndices +
-      ", MET:" + request.method() +
-      ", PTH:" + request.path() +
-      ", CNT:" + (logger.isDebugEnabled() ? content : "<OMITTED, LENGTH=" + getContent().length() + ">") +
-      ", HDR:" + theHeaders +
-      ", HIS:" + hist +
-      " }";
+    return new StringBuilder()
+      .append("{ ID:").append(id)
+      .append(", TYP:").append(actionRequest.getClass().getSimpleName())
+      .append(", USR:").append((loggedInUser.get().isPresent() ? loggedInUser.get().get() : "(?)"))
+      .append(", ACT:").append(action)
+      .append(", OA:").append(getRemoteAddress())
+      .append(", IDX:").append(theIndices)
+      .append(", MET:").append(request.method())
+      .append(", PTH:").append(request.path())
+      .append(", HIS:").append(logger.isDebugEnabled() ? hist : "<DEBUG_ONLY>")
+      .append(", RLG:").append(ruleRole.get().isPresent() ? ruleRole.get().toString() : "(?)")
+      .append(" }")
+      .toString();
   }
 
 
