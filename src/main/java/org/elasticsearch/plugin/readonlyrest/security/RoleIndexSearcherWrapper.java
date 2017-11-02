@@ -1,11 +1,8 @@
 package org.elasticsearch.plugin.readonlyrest.security;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -86,24 +83,7 @@ public class RoleIndexSearcherWrapper extends IndexSearcherWrapper {
 			return reader;
 		}
 
-		String userTransientEncoded = threadContext.getHeader(ThreadConstants.userTransient);
-		UserTransient userTransient = null;
-		if (userTransientEncoded == null)
-			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
-		byte [] data = Base64.getDecoder().decode(userTransientEncoded);
-        ObjectInputStream ois;
-		try {
-			ois = new ObjectInputStream(new ByteArrayInputStream(data));
-			Object o  = ois.readObject();
-			if (o instanceof UserTransient) {
-				userTransient = (UserTransient) o;
-			}
-	        ois.close();
-		} catch (IOException e) {
-			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
-		} catch (ClassNotFoundException e) {
-			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
-		}
+		UserTransient userTransient = UserTransient.Deserialize(threadContext.getHeader(ThreadConstants.userTransient));
 		if (userTransient == null) {
 			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
 		}

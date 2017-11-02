@@ -1,6 +1,12 @@
 package org.elasticsearch.plugin.readonlyrest.security;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.Base64;
 
 import org.elasticsearch.plugin.readonlyrest.acl.blocks.Group;
 import org.elasticsearch.plugin.readonlyrest.oauth.OAuthToken;
@@ -92,5 +98,38 @@ public class UserTransient implements Serializable {
                 + ", RULE: " + this._ruleId
                 + ", ROLE: " + this._role
                 + "}";
+    }
+    
+    public String serialize() {
+    	ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos;
+		try {
+			oos = new ObjectOutputStream(baos);
+			oos.writeObject(this);
+	        oos.close();
+		} catch (IOException e) {
+			return null;
+		}
+        return Base64.getEncoder().encodeToString(baos.toByteArray());
+    }
+    
+    public static UserTransient Deserialize(String userTransientEncoded) {
+    	UserTransient userTransient = null;
+    	byte [] data = Base64.getDecoder().decode(userTransientEncoded);
+        ObjectInputStream ois;
+		try {
+			ois = new ObjectInputStream(new ByteArrayInputStream(data));
+			Object o  = ois.readObject();
+			if (o instanceof UserTransient) {
+				userTransient = (UserTransient) o;
+			}
+	        ois.close();
+		} catch (IOException e) {
+			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
+		} catch (ClassNotFoundException e) {
+			throw new IllegalStateException("Couldn't extract userTransient from threadContext.");
+		}
+		return userTransient;
+
     }
 }

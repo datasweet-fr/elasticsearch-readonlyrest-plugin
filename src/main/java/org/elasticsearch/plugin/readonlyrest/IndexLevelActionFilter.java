@@ -20,11 +20,6 @@ package org.elasticsearch.plugin.readonlyrest;
 import static org.elasticsearch.rest.RestStatus.FORBIDDEN;
 import static org.elasticsearch.rest.RestStatus.NOT_FOUND;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.util.Base64;
-
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
@@ -138,17 +133,9 @@ public class IndexLevelActionFilter extends AbstractComponent implements ActionF
 
 					if (result.isMatch() && Block.Policy.ALLOW.equals(result.getBlock().getPolicy())) {
 						try {
-							UserTransient usr = UserTransient.CreateFromRequestContext(rc);
-							ByteArrayOutputStream baos = new ByteArrayOutputStream();
-					        ObjectOutputStream oos;
-							try {
-								oos = new ObjectOutputStream( baos );
-								oos.writeObject(usr);
-						        oos.close();
-							} catch (IOException e) {
-								logger.error("Error while serializing token " + e.getLocalizedMessage());
-							}
-					        String encodedUser = Base64.getEncoder().encodeToString(baos.toByteArray());
+							String encodedUser = UserTransient.CreateFromRequestContext(rc).serialize();
+							if (encodedUser == null) 
+								logger.error("Error while serializing token");
 							if (threadPool.getThreadContext().getHeader(ThreadConstants.userTransient) == null) {
 								threadPool.getThreadContext().putHeader(ThreadConstants.userTransient, encodedUser);
 							}
