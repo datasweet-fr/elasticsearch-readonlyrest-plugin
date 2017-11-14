@@ -219,6 +219,14 @@ public class RCTransactionalIndices {
           okSetResult &= okSubResult[0];
         }
 
+        if (!okSetResult && actionRequest instanceof MultiSearchRequest) {
+            okSetResult = true;
+            MultiSearchRequest msr = (MultiSearchRequest) actionRequest;
+            for (SearchRequest sr : msr.requests()) {
+              okSetResult &= ReflecUtils.setIndices(sr, Sets.newHashSet("indices"), newIndices, logger);
+            }
+        }
+        
         if (okSetResult) {
           logger.debug("success changing indices: " + newIndices + " correctly set as " + get());
         }
